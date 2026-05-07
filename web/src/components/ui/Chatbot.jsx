@@ -230,75 +230,101 @@ export default function Chatbot() {
   }, [user]);
 
   // ── Send message ───────────────────────────────────────────
-  const sendMessage = useCallback(async (text) => {
-    const msg = (text || input).trim();
-    if (!msg || loading) return;
+const sendMessage = useCallback(async (text) => {
+  const msg = (text || input).trim();
 
-    setInput('');
-    if (inputRef.current) inputRef.current.style.height = 'auto';
+  if (!msg || loading) return;
 
-    const arabicMsg = isRtl(msg);
-    const newLang = arabicMsg ? 'ar' : 'en';
-    setLang(newLang);
+  const arabicMsg = isRtl(msg);
+  const newLang = arabicMsg ? 'ar' : 'en';
 
-    setMessages(prev => [...prev, {
-      id: Date.now(), role: 'user', text: msg, timestamp: new Date(),
-    }]);
+  setInput('');
+  setLang(newLang);
+  setLoading(true);
+
+  if (inputRef.current) {
+    inputRef.current.style.height = 'auto';
+  }
+
+  const userMessage = {
+    id: Date.now(),
+    role: 'user',
+    text: msg,
+    timestamp: new Date()
+  };
+
+  const thinkingMessage = {
+    id: 'thinking',
+    role: 'bot',
+    text: '',
+    isThinking: true,
+    timestamp: new Date()
+  };
+
+  setMessages((prev) => [...prev, userMessage, thinkingMessage]);
+
+  try {
+    const { data } = await axiosInstance.post('/chat', {
+      message: msg,
+      history: history.slice(-6),
+      user_context: user
+        ? {
+            name: user.first_name,
+            student_id: user.student_id,
+            role: user.role
+          }
+        : null
+    });
+
+    const reply = data.data;
+
+    setHistory((prev) => [
+      ...prev,
+      { role: 'user', text: msg },
+      { role: 'model', text: reply.message }
+    ]);
+
+    setMessages((prev) => [
+      ...prev.filter((m) => m.id !== 'thinking'),
+      {
+        id: Date.now() + 1,
+        role: 'bot',
+        text: reply.message,
+        cards: reply.cards || null,
+        action: reply.action || null,
+        followUp: reply.follow_up || null,
+        timestamp: new Date()
+      }
+    ]);
+
+    if (reply.follow_up?.length) {
+      setChips(reply.follow_up);
+    } else {
+      setChips(getDefaultChips(location.pathname, newLang));
+    }
+  } catch (error) {
+    console.error('Chatbot error:', error);
+
+    setMessages((prev) => [
+      ...prev.filter((m) => m.id !== 'thinking'),
+      {
+        id: Date.now() + 1,
+        role: 'bot',
+        isError: true,
+        timestamp: new Date(),
+        text: arabicMsg
+          ? 'عذراً، حدث خطأ. تأكد أن السيرفر يعمل.'
+          : 'Sorry, an error occurred. Make sure the backend is running.'
+      }
+    ]);
+  } finally {
+    setLoading(false);
 
     setTimeout(() => {
-      setMessages(prev => [...prev, {
-        id: 'thinking', role: 'bot', text: '', isThinking: true, timestamp: new Date(),
-      }]);
-      setLoading(true);
-    }, 280);
-
-    try {
-      const { data } = await axiosInstance.post('/chat', {
-        message: msg,
-        history: history.slice(-6),
-        user_context: user
-          ? { name: user.first_name, student_id: user.student_id, role: user.role }
-          : null,
-      });
-
-      const reply = data.data;
-
-      setHistory(prev => [
-        ...prev,
-        { role: 'user',  text: msg          },
-        { role: 'model', text: reply.message },
-      ]);
-
-      setMessages(prev => [
-        ...prev.filter(m => m.id !== 'thinking'),
-        {
-          id:        Date.now() + 1,
-          role:      'bot',
-          text:      reply.message,
-          cards:     reply.cards     || null,
-          action:    reply.action    || null,
-          followUp:  reply.follow_up || null,
-          timestamp: new Date(),
-        },
-      ]);
-
-      if (reply.follow_up?.length) setChips(reply.follow_up);
-      else setChips(getDefaultChips(location.pathname, newLang));
-
-    } catch {
-      setMessages(prev => [
-        ...prev.filter(m => m.id !== 'thinking'),
-        {
-          id: Date.now() + 1, role: 'bot', isError: true, timestamp: new Date(),
-          text: arabicMsg
-            ? 'عذراً، حدث خطأ. تأكد أن السيرفر يعمل.'
-            : 'Sorry, an error occurred. Make sure the backend is running.',
-        },
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  }, [input, loading, history, user, location.pathname]);
+      inputRef.current?.focus();
+    }, 50);
+  }
+}, [input, loading, history, user, location.pathname]);
 
   // ── Voice input ────────────────────────────────────────────
   const toggleVoice = () => {
