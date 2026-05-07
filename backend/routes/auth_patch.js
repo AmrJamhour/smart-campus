@@ -1,18 +1,17 @@
 const express = require('express');
-const router  = express.Router();
-const { protect } = require('../middleware/auth');
+const router = express.Router();
+
 const {
   forgotPassword,
   resetPassword,
   requestPasswordChange,
-  confirmPasswordChange,
+  confirmPasswordChange
 } = require('../controllers/authController_patch');
 
-// Public — no auth needed
-router.post('/forgot-password',  forgotPassword);
-router.post('/reset-password',   resetPassword);
+const { protect } = require('../middleware/auth');
 
-// Protected — logged in users only
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password', resetPassword);
 router.post('/request-password-change', protect, requestPasswordChange);
 router.post('/confirm-password-change', protect, confirmPasswordChange);
 
