@@ -1,0 +1,420 @@
+/* =========================================================
+   Smart Campus Responsive System
+   File: web/src/styles/responsive.css
+
+   IMPORTANT:
+   This file is only for global layout, navbar, sidebar,
+   cards, forms, tables, auth pages, dashboard, and map editor.
+
+   Do NOT put SchedulePage-specific or MapPage-specific rules here.
+   Put those inside:
+   - web/src/pages/SchedulePage.css
+   - web/src/pages/MapPage.css
+   ========================================================= */
+
+/* ---------- Global safety ---------- */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+  overflow-x: hidden;
+}
+
+img,
+svg,
+canvas {
+  max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+/* ---------- App layout ---------- */
+
+.app-layout,
+.app-body,
+.main-content,
+.main-content--map {
+  min-width: 0;
+}
+
+.main-content {
+  width: 100%;
+  min-width: 0;
+}
+
+.card {
+  min-width: 0;
+}
+
+.page-header {
+  gap: 12px;
+}
+
+/* ---------- Responsive grids ---------- */
+
+.grid-4,
+.grid-3,
+.grid-2 {
+  display: grid;
+  gap: var(--space-lg, 16px);
+}
+
+.grid-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.grid-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.grid-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 1200px) {
+  .grid-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .grid-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .grid-4,
+  .grid-3,
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- Navbar ---------- */
+
+@media (max-width: 900px) {
+  .navbar__search {
+    max-width: 320px;
+  }
+}
+
+@media (max-width: 768px) {
+  .navbar {
+    height: 64px;
+    padding-inline: 10px;
+  }
+
+  .navbar__brand-text {
+    display: none;
+  }
+
+  .navbar__search {
+    flex: 1;
+    max-width: none;
+    min-width: 0;
+  }
+
+  .navbar__username {
+    display: none;
+  }
+
+  .profile-dropdown,
+  .notif-dropdown {
+    right: 8px;
+    width: min(92vw, 340px);
+  }
+}
+
+@media (max-width: 520px) {
+  .navbar__search {
+    display: none;
+  }
+}
+
+/* ---------- Sidebar ---------- */
+
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    top: 64px;
+    left: 0;
+    bottom: 0;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+  }
+
+  .sidebar--mobile-open {
+    transform: translateX(0);
+  }
+
+  .sidebar-overlay {
+    position: fixed;
+    inset: 64px 0 0 0;
+    background: rgba(7, 20, 45, 0.35);
+    z-index: 40;
+  }
+
+  .app-body {
+    min-width: 0;
+  }
+
+  .main-content,
+  .main-content--map {
+    margin-left: 0 !important;
+    width: 100%;
+    max-width: 100vw;
+  }
+}
+
+/* ---------- Mobile app shell ---------- */
+
+@media (max-width: 768px) {
+  .app-layout,
+  .app-body,
+  .main-content,
+  .main-content--map {
+    width: 100%;
+    max-width: 100vw;
+    min-width: 0;
+  }
+
+  .main-content {
+    padding: 12px !important;
+    overflow-x: hidden;
+    padding-bottom: 86px !important;
+  }
+
+  .main-content--map {
+    padding: 8px !important;
+    overflow: auto;
+    padding-bottom: 86px !important;
+  }
+}
+
+/* ---------- Buttons and headers ---------- */
+
+@media (max-width: 700px) {
+  .page-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .page-header .btn,
+  .page-header button,
+  .page-header a {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .btn {
+    white-space: nowrap;
+  }
+}
+
+/* ---------- Forms ---------- */
+
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .modal,
+  .modal__content {
+    width: min(94vw, 520px) !important;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+}
+
+/* ---------- Tables ---------- */
+
+.table-wrap,
+.card--no-pad {
+  overflow-x: auto;
+}
+
+table {
+  min-width: 760px;
+}
+
+@media (max-width: 768px) {
+  .table-wrap table,
+  .card--no-pad table {
+    min-width: 760px;
+  }
+}
+
+/* ---------- Admin filters ---------- */
+
+@media (max-width: 768px) {
+  .admin-filter-bar,
+  .rooms-filter-bar,
+  .map-filter-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .admin-filter-bar select,
+  .rooms-filter-bar select,
+  .map-filter-bar select,
+  .admin-filter-bar input,
+  .rooms-filter-bar input,
+  .map-filter-bar input {
+    width: 100% !important;
+  }
+}
+
+/* ---------- Admin dashboard ---------- */
+
+@media (max-width: 768px) {
+  .dashboard-page,
+  .dashboard,
+  .dashboard-content {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .dashboard-hero,
+  .hero-card,
+  .welcome-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow: hidden;
+  }
+
+  .dashboard-hero {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 16px !important;
+    padding: 22px !important;
+  }
+
+  .dashboard-hero h1,
+  .hero-card h1,
+  .welcome-card h1 {
+    font-size: 28px !important;
+    line-height: 1.2 !important;
+    max-width: 100% !important;
+  }
+
+  .dashboard-hero p,
+  .hero-card p,
+  .welcome-card p {
+    font-size: 13px !important;
+    max-width: 100% !important;
+  }
+
+  .dashboard-hero .btn,
+  .hero-card .btn,
+  .welcome-card .btn,
+  .dashboard-hero a,
+  .hero-card a,
+  .welcome-card a {
+    width: 100% !important;
+    max-width: 100% !important;
+    justify-content: center !important;
+    white-space: normal !important;
+  }
+
+  .stats-grid,
+  .dashboard-stats,
+  .quick-access-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .stat-card {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+/* ---------- Admin map editor ---------- */
+
+.mec-toolbar {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mec-select {
+  min-width: 180px;
+}
+
+.mec-editor {
+  min-width: 0;
+}
+
+.mec-side-panel {
+  min-width: 280px;
+}
+
+@media (max-width: 1100px) {
+  .mec-editor {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .mec-side-panel {
+    width: 100% !important;
+    max-width: none !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .mec-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .mec-toolbar select,
+  .mec-toolbar button {
+    width: 100%;
+  }
+}
+
+/* ---------- Auth pages ---------- */
+
+@media (max-width: 900px) {
+  .auth-page {
+    grid-template-columns: 1fr !important;
+  }
+
+  .auth-hero {
+    display: none;
+  }
+
+  .auth-panel {
+    width: 100%;
+    min-height: 100vh;
+  }
+}
+
+/* ---------- Chatbot mobile ---------- */
+
+@media (max-width: 768px) {
+  .chatbot-button,
+  .chatbot-toggle,
+  .chatbot-fab {
+    right: 14px !important;
+    bottom: 14px !important;
+  }
+}

@@ -590,3 +590,135 @@
   color: red;
   font-size: 12px;
 }
+/* =========================================================
+   FINAL MOBILE FIX — SchedulePage
+   ========================================================= */
+
+@media (max-width: 768px) {
+  .sc-page {
+    width: 100%;
+    max-width: 100vw;
+    padding: 10px;
+    overflow-x: hidden;
+  }
+
+  .sc-header {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .sc-header h1,
+  .sc-header p {
+    display: none;
+  }
+
+  .sc-controls {
+    width: 100%;
+    margin: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    direction: ltr;
+  }
+
+  .sc-controls::before {
+    grid-column: 1 / -1;
+    justify-self: end;
+    content: "الفصل";
+    font-size: 12px;
+    font-weight: 700;
+    color: #000;
+  }
+
+  .sc-controls button,
+  .sc-controls select {
+    width: 100%;
+    height: 36px;
+    font-size: 12px;
+    padding: 4px 8px;
+  }
+
+  .sc-semester-title {
+    margin: 12px 0;
+    text-align: left;
+    font-size: 14px;
+    white-space: nowrap;
+    direction: ltr;
+  }
+
+  .sc-table-wrapper {
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    overflow-x: auto !important;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 12px;
+    direction: ltr;
+  }
+
+  .sc-grid-table {
+    width: 980px !important;
+    min-width: 980px !important;
+    max-width: none !important;
+    table-layout: fixed;
+    direction: rtl;
+  }
+
+  .sc-grid-table th,
+  .sc-grid-table td {
+    min-width: 52px;
+  }
+
+  .sc-day-time,
+  .sc-day-name {
+    width: 70px !important;
+    min-width: 70px !important;
+  }
+
+  .sc-course {
+    font-size: 10px;
+    line-height: 1.12;
+    padding: 3px 2px;
+    min-height: 74px;
+  }
+
+  .sc-course strong,
+  .sc-course span,
+  .sc-course em {
+    display: block;
+    word-break: break-word;
+  }
+
+  .sc-text-wrapper {
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    direction: ltr;
+  }
+
+  .sc-text-table {
+    width: 1100px !important;
+    min-width: 1100px !important;
+    max-width: none !important;
+    direction: rtl;
+  }
+
+  .prof-grid-wrapper {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .prof-grid-table {
+    width: 1000px !important;
+    min-width: 1000px !important;
+    max-width: none !important;
+  }
+}

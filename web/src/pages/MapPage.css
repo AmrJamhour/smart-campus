@@ -860,3 +860,333 @@
 .route-action:hover {
   background: linear-gradient(135deg, #0757df, #08235e) !important;
 }
+
+@media (max-width: 768px) {
+  .map-page {
+    width: 100%;
+    max-width: 100vw;
+    padding: 8px;
+    overflow-x: hidden;
+  }
+
+  .map-floor-bar {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .map-floor-left {
+    width: 100%;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .map-floor-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .map-floor-btn {
+    min-width: 40px;
+    height: 36px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+
+  .map-floor-title {
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .map-layout {
+    width: 100%;
+    max-width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .map-tools-panel {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    order: 1;
+  }
+
+  .map-tools-card,
+  .route-result-card,
+  .room-popup-card {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .map-tools-card {
+    padding: 14px;
+  }
+
+  .map-tools-card h3 {
+    font-size: 18px;
+  }
+
+  .map-need-select {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .map-canvas-card {
+    width: 100%;
+    max-width: 100%;
+    order: 2;
+    overflow: hidden;
+    border-radius: 16px;
+  }
+
+  .map-canvas-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    min-height: 360px;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /*
+    Important:
+    Do not let the map shrink too much on mobile.
+    Keep it large and scrollable, so room blocks stay usable.
+  */
+  .map-floor-image {
+    display: block;
+    width: 760px !important;
+    min-width: 760px !important;
+    max-width: none !important;
+    height: auto !important;
+  }
+
+  .map-svg-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 760px !important;
+    min-width: 760px !important;
+    max-width: none !important;
+    height: 100% !important;
+    pointer-events: none;
+  }
+
+  .map-svg-overlay .map-block-zone,
+  .map-svg-overlay rect,
+  .map-svg-overlay polygon,
+  .map-svg-overlay polyline {
+    pointer-events: auto;
+  }
+
+  .map-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 11px;
+    padding: 10px;
+  }
+
+  .legend-item {
+    white-space: nowrap;
+  }
+
+  .room-popup-card {
+    position: relative;
+    left: auto;
+    right: auto;
+    top: auto;
+    margin-top: 12px;
+  }
+
+  .room-popup-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 430px) {
+  .map-floor-image,
+  .map-svg-overlay {
+    width: 820px !important;
+    min-width: 820px !important;
+  }
+
+  .map-canvas-wrap {
+    min-height: 390px;
+  }
+}
+/* =========================================================
+   FINAL MOBILE FIX — MapPage
+   ========================================================= */
+
+@media (max-width: 768px) {
+  .map-page {
+    width: 100%;
+    max-width: 100vw;
+    padding: 8px;
+    overflow-x: hidden;
+  }
+
+  .map-floor-bar {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px;
+    border-radius: 14px;
+  }
+
+  .map-floor-left {
+    width: 100%;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .map-floor-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .map-floor-btn {
+    min-width: 40px;
+    height: 34px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+
+  .map-floor-title {
+    width: 100%;
+    text-align: center;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .map-layout {
+    width: 100%;
+    max-width: 100%;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  .map-tools-panel {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    order: 1;
+    position: relative !important;
+    top: auto !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding-right: 0;
+    padding-bottom: 0;
+  }
+
+  .map-tools-card,
+  .route-result-card,
+  .room-popup-card {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .map-tools-card {
+    padding: 14px;
+  }
+
+  .map-tools-card h3 {
+    font-size: 17px;
+  }
+
+  .map-need-select {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .route-control-box {
+    margin-top: 10px;
+  }
+
+  .map-canvas-card {
+    width: 100%;
+    max-width: 100%;
+    order: 2;
+    overflow: hidden;
+    border-radius: 16px;
+    padding: 10px;
+  }
+
+  .map-canvas-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    min-height: 430px;
+    overflow: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .map-floor-image {
+    display: block;
+    width: 1050px !important;
+    min-width: 1050px !important;
+    max-width: none !important;
+    height: auto !important;
+  }
+
+  .map-svg-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1050px !important;
+    min-width: 1050px !important;
+    max-width: none !important;
+    height: 100% !important;
+    pointer-events: none;
+  }
+
+  .map-svg-overlay .map-block-zone,
+  .map-svg-overlay rect,
+  .map-svg-overlay polygon,
+  .map-svg-overlay polyline,
+  .map-svg-overlay text {
+    pointer-events: auto;
+  }
+
+  .map-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 11px;
+    padding: 10px 2px 4px;
+  }
+
+  .legend-item {
+    white-space: nowrap;
+  }
+
+  .room-popup-card {
+    position: relative !important;
+    left: auto !important;
+    right: auto !important;
+    top: auto !important;
+    margin-top: 12px;
+    margin-bottom: 0;
+  }
+
+  .room-popup-grid {
+    grid-template-columns: 1fr !important;
+  }
+}

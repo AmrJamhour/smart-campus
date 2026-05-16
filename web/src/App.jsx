@@ -23,6 +23,7 @@ import MapEditorPage from './pages/admin/MapEditorPage';
 import ProfessorDashboard from './pages/ProfessorDashboard';
 import './styles/variables.css';
 import './styles/global.css';
+import './styles/responsive.css';
 
 function RequireAuth({ children }) {
   const { isAuthenticated, loading, initialized } = useAuth();
