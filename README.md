@@ -133,7 +133,7 @@ Extending the platform to support multiple campuses of An-Najah National Univers
 | Ground Floor Map | Complete |
 | Admin Dashboard | Complete |
 | Notification System | Complete |
-| Additional Floor Maps | In Progress (AutoCAD) |
+| Additional Floor Maps | Complete |
 | Real-Time Room Booking | Planned |
 | Indoor Positioning | Planned |
 
