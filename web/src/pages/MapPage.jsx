@@ -1,11 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { G_START_NODES, findGroundFloorRoute } from '../data/groundFloorNavigation';
 import { createPortal } from 'react-dom';
 import SmartFinderPanel from '../components/map/SmartFinderPanel';
 import '../components/map/SmartFinderPanel.css';
-import { B2_START_NODES, findB2Route } from '../data/navigation/b2Navigation';
 import './MapPage.css';
 
 const REQUEST_OPTIONS = [
@@ -6244,11 +6242,6 @@ const currentFloor = FLOOR_MAPS[activeFloor];
     return currentFloor.blocks.filter(block => matchesNeed(block, selectedNeed));
   }, [currentFloor, selectedNeed]);
 
-  const activeStartNodes = useMemo(() => {
-    if (activeFloor === 'G') return G_START_NODES;
-    if (activeFloor === 'B2') return B2_START_NODES;
-    return [];
-  }, [activeFloor]);
 
   function clearRoute() {
     setRoutePath([]);
@@ -6256,44 +6249,6 @@ const currentFloor = FLOOR_MAPS[activeFloor];
     setRouteTarget(null);
     setRouteError('');
   }
-
-  function handleNavigateToBlock(block) {
-    let result = null;
-
-    if (activeFloor === 'G') {
-      result = findGroundFloorRoute({
-        fromNodeId: startNodeId,
-        toRoomNumber: block.roomNumber,
-        accessibleOnly: accessibleRoute,
-      });
-    } else if (activeFloor === 'B2') {
-      result = findB2Route({
-        fromNodeId: startNodeId,
-        toRoomNumber: block.roomNumber,
-        accessibleOnly: accessibleRoute,
-      });
-    } else {
-      setRoutePath([]);
-      setRouteInstructions([]);
-      setRouteTarget(null);
-      setRouteError('Navigation is available for G and B2 first. Other floors will be added next.');
-      return;
-    }
-
-    if (!result.success) {
-      setRoutePath([]);
-      setRouteInstructions([]);
-      setRouteTarget(null);
-      setRouteError(result.message || 'No route found.');
-      return;
-    }
-
-    setRoutePath(result.path || result.points || []);
-    setRouteInstructions(result.instructions || []);
-    setRouteTarget(block.roomNumber);
-    setRouteError('');
-  }
-
   function handleSelectBlock(block) {
     setSelectedBlock(block);
   }
@@ -6369,7 +6324,6 @@ function handleRoomSearchSubmit(event) {
   setHoveredBlock(null);
   setRoomSearchError('');
   setMapZoom(1);
-  clearRoute();
 
   if (result.floorKey === 'G') {
     setStartNodeId('G_NORTH_ENTRANCE_NODE');
@@ -6397,13 +6351,6 @@ return (
                   setSelectedBlock(null);
                   setHoveredBlock(null);
                   setSelectedNeed('all');
-                  clearRoute();
-                  if (floorKey === 'G') {
-                   setStartNodeId('G_NORTH_ENTRANCE_NODE');
-                  }
-                  if (floorKey === 'B2') {
-                   setStartNodeId('B2_LEFT_STAIRS');
-                  }
                }}
                >{FLOOR_MAPS[floorKey].label}
               </button>
@@ -6415,19 +6362,12 @@ return (
 
       <div className="map-layout">
        <div className="map-tools-panel">
-        <SmartFinderPanel
+<SmartFinderPanel
   requestOptions={REQUEST_OPTIONS}
   selectedNeed={selectedNeed}
   setSelectedNeed={setSelectedNeed}
   setSelectedBlock={setSelectedBlock}
-  clearRoute={clearRoute}
   visibleBlocks={visibleBlocks}
-  activeFloor={activeFloor}
-  activeStartNodes={activeStartNodes}
-  startNodeId={startNodeId}
-  setStartNodeId={setStartNodeId}
-  accessibleRoute={accessibleRoute}
-  setAccessibleRoute={setAccessibleRoute}
 />
 <div className="room-search-card">
   <div className="room-search-head">
@@ -6467,33 +6407,6 @@ return (
     </p>
   )}
 </div>
-  {activeFloor === 'G' && (routePath.length > 0 || routeError) && (
-    <div className="route-result-card">
-      <div className="route-result-header">
-        <h3>Navigation</h3>
-
-        <button type="button" onClick={clearRoute}>
-          Clear
-        </button>
-      </div>
-
-      {routeError ? (
-        <p className="route-error">{routeError}</p>
-      ) : (
-        <>
-          <p className="route-target">
-            Route to <strong>{routeTarget}</strong>
-          </p>
-
-          <ol className="route-instructions">
-            {routeInstructions.map((item, index) => (
-              <li key={`${item}-${index}`}>{item}</li>
-            ))}
-          </ol>
-        </>
-      )}
-    </div>
-  )}
 
   {createPortal(
   <AnimatePresence>
@@ -6565,16 +6478,6 @@ return (
             ))}
           </div>
 
-          {['G', 'B2'].includes(activeFloor) && (
-            <button
-              type="button"
-              className="room-popup-action route-action"
-              onClick={() => handleNavigateToBlock(selectedBlock)}
-            >
-              Navigate to this location
-            </button>
-          )}
-
           <button
             type="button"
             className="room-popup-action"
@@ -6641,15 +6544,7 @@ return (
         viewBox={`0 0 ${currentFloor.width} ${currentFloor.height}`}
         preserveAspectRatio="none"
       >
-        {['G', 'B2'].includes(activeFloor) && routePath.length > 1 && (
-          <motion.polyline
-            className="navigation-route"
-            points={routePath.map(point => `${point.x},${point.y}`).join(' ')}
-            initial={{ pathLength: 0, opacity: 0 }}
-            animate={{ pathLength: 1, opacity: 1 }}
-            transition={{ duration: 0.8, ease: 'easeInOut' }}
-          />
-        )}
+        
 
         {currentFloor.blocks.map(block => {
           const hiddenByFilter = !matchesNeed(block, selectedNeed);

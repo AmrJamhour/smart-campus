@@ -570,30 +570,6 @@
   box-shadow: 0 8px 18px rgba(11, 42, 111, 0.22);
 }
 
-/* Route line */
-.navigation-route {
-  fill: none;
-  stroke: #0b63ff;
-  stroke-width: 7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-dasharray: 18 12;
-  vector-effect: non-scaling-stroke;
-  filter: drop-shadow(0 8px 14px rgba(11, 99, 255, 0.38));
-  animation: routeDashMove 1.1s linear infinite;
-  pointer-events: none !important;
-}
-
-.navigation-route-segment {
-  fill: none;
-  stroke: #0b63ff;
-  stroke-width: 7;
-  stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
-  filter: drop-shadow(0 8px 14px rgba(11, 99, 255, 0.38));
-  pointer-events: none !important;
-}
-
 /* =========================================================
    Legend
    ========================================================= */
@@ -858,113 +834,7 @@
   transform: translateY(-1px);
 }
 
-.route-action {
-  background: linear-gradient(135deg, #0b63ff, #0b2a6f) !important;
-  color: #ffffff !important;
-  box-shadow: 0 10px 22px rgba(11, 99, 255, 0.22);
-}
 
-.route-action:hover {
-  background: linear-gradient(135deg, #0757df, #08235e) !important;
-}
-
-/* =========================================================
-   Route controls/result
-   ========================================================= */
-
-.route-control-box {
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px solid #e1e8f3;
-}
-
-.route-control-label {
-  display: block;
-  margin-bottom: 8px;
-  color: #10254d;
-  font-size: 13px;
-  font-weight: 900;
-}
-
-.route-check-row {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin-top: 12px;
-  color: #24324b;
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.route-check-row input {
-  width: 16px;
-  height: 16px;
-  accent-color: #0b63ff;
-}
-
-.route-result-card {
-  background: #ffffff;
-  border: 1px solid #d9e1ef;
-  border-radius: 20px;
-  padding: 16px;
-  box-shadow: 0 10px 26px rgba(16, 24, 40, 0.06);
-}
-
-.route-result-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.route-result-header h3 {
-  margin: 0;
-  color: #10254d;
-  font-size: 18px;
-  font-weight: 950;
-}
-
-.route-result-header button {
-  border: 0;
-  background: #eef3fb;
-  color: #0b2a6f;
-  border-radius: 999px;
-  padding: 7px 12px;
-  font-size: 12px;
-  font-weight: 900;
-  cursor: pointer;
-}
-
-.route-result-header button:hover {
-  background: #dfe9fb;
-}
-
-.route-target {
-  margin: 12px 0 10px;
-  color: #51627e;
-  font-size: 14px;
-}
-
-.route-error {
-  margin: 12px 0 0;
-  color: #dc2626;
-  font-size: 14px;
-  font-weight: 800;
-}
-
-.route-instructions {
-  margin: 10px 0 0;
-  padding-left: 18px;
-  color: #24324b;
-}
-
-.route-instructions li {
-  margin-bottom: 8px;
-  line-height: 1.45;
-  font-size: 14px;
-  font-weight: 650;
-}
 
 /* =========================================================
    Animations

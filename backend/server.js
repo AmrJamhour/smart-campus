@@ -31,6 +31,7 @@ const officeHoursRoutes = require('./routes/officeHours');
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
+const HOST = process.env.HOST || '0.0.0.0';
 
 // ─── Trust proxy ─────────────────────────────────────────────
 app.set('trust proxy', 1);
@@ -76,6 +77,7 @@ if (process.env.NODE_ENV !== 'test') {
 
 // ─── Static Files ────────────────────────────────────────────
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 
 // ─── Health Check ────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
@@ -157,11 +159,13 @@ app.use(errorHandler);
 async function startServer() {
   try {
     await testConnection();
-    app.listen(PORT, () => {
-      console.log(`\n🚀 Smart Campus API running on port ${PORT}`);
-      console.log(`📡 Environment: ${process.env.NODE_ENV}`);
-      console.log(`🌐 Health: http://localhost:${PORT}/api/health\n`);
-    });
+   app.listen(PORT, HOST, () => {
+  console.log(`\n🚀 Smart Campus API running on ${HOST}:${PORT}`);
+  console.log(`📡 Environment: ${process.env.NODE_ENV}`);
+  console.log(`🌐 Local health: http://localhost:${PORT}/api/health`);
+  console.log(`📱 Android emulator API: http://10.0.2.2:${PORT}/api`);
+  console.log(`📱 Real phone API: http://YOUR_PC_IP:${PORT}/api\n`);
+});
   } catch (error) {
     console.error('❌ Failed to start server:', error.message);
     process.exit(1);

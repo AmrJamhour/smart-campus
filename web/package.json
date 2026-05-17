@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
+    "@capacitor/android": "^8.3.4",
+    "@capacitor/cli": "^8.3.4",
+    "@capacitor/core": "^8.3.4",
     "axios": "^1.16.0",
     "date-fns": "^3.0.6",
     "framer-motion": "^12.38.0",
@@ -15,7 +18,11 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build"
+    "build": "react-scripts build",
+  "cap:add:android": "npx cap add android",
+  "cap:build": "npm run build && npx cap sync android",
+  "cap:open": "npx cap open android",
+  "cap:run:android": "npm run build && npx cap sync android && npx cap run android"
   },
   "proxy": "http://localhost:5000",
   "browserslist": {

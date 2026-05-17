@@ -10,5 +10,6 @@
             "database": "smart_campus",
             "username": "postgres"
         }
-    ]
+    ],
+    "java.configuration.updateBuildConfiguration": "interactive"
 }

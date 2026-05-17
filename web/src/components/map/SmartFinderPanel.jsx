@@ -38,27 +38,27 @@ function getRequestIcon(value) {
 }
 
 export default function SmartFinderPanel({
-  requestOptions,
-  selectedNeed,
+  requestOptions = [],
+  selectedNeed = 'all',
   setSelectedNeed,
   setSelectedBlock,
-  clearRoute,
-  visibleBlocks,
-  activeFloor,
-  activeStartNodes,
-  startNodeId,
-  setStartNodeId,
-  accessibleRoute,
-  setAccessibleRoute,
+  visibleBlocks = [],
 }) {
+  const safeRequestOptions = Array.isArray(requestOptions) ? requestOptions : [];
+  const safeVisibleBlocks = Array.isArray(visibleBlocks) ? visibleBlocks : [];
+
   const activeOption =
-    requestOptions.find((option) => option.value === selectedNeed) ||
-    requestOptions[0];
+    safeRequestOptions.find(option => option.value === selectedNeed) ||
+    safeRequestOptions[0];
 
   function handleNeedChange(value) {
-    setSelectedNeed(value);
-    setSelectedBlock(null);
-    clearRoute();
+    if (typeof setSelectedNeed === 'function') {
+      setSelectedNeed(value);
+    }
+
+    if (typeof setSelectedBlock === 'function') {
+      setSelectedBlock(null);
+    }
   }
 
   return (
@@ -87,9 +87,9 @@ export default function SmartFinderPanel({
       </div>
 
       <div className="map-filter-pills" role="tablist" aria-label="Map filters">
-        {requestOptions
-          .filter((option) => QUICK_REQUEST_VALUES.includes(option.value))
-          .map((option) => {
+        {safeRequestOptions
+          .filter(option => QUICK_REQUEST_VALUES.includes(option.value))
+          .map(option => {
             const active = selectedNeed === option.value;
 
             return (
@@ -115,9 +115,9 @@ export default function SmartFinderPanel({
           <select
             className="map-need-select map-need-select--pro"
             value={selectedNeed}
-            onChange={(event) => handleNeedChange(event.target.value)}
+            onChange={event => handleNeedChange(event.target.value)}
           >
-            {requestOptions.map((option) => (
+            {safeRequestOptions.map(option => (
               <option key={option.value} value={option.value}>
                 {getRequestIcon(option.value)} {option.label}
               </option>
@@ -147,62 +147,15 @@ export default function SmartFinderPanel({
 
         <motion.div
           className="map-summary-box map-summary-box--count"
-          key={`count-${visibleBlocks.length}`}
+          key={`count-${safeVisibleBlocks.length}`}
           initial={{ opacity: 0, scale: 0.92 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.2 }}
         >
           <span>Found</span>
-          <strong>{visibleBlocks.length}</strong>
+          <strong>{safeVisibleBlocks.length}</strong>
         </motion.div>
       </div>
-
-      {['G', 'B2'].includes(activeFloor) && (
-        <motion.div
-          className="route-control-box route-control-box--pro"
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.25, delay: 0.08 }}
-        >
-          <div className="route-control-title">
-            <span>🧭</span>
-
-            <div>
-              <strong>Navigation start</strong>
-              <small>Select your starting point</small>
-            </div>
-          </div>
-
-          <select
-            className="map-need-select route-select-pro"
-            value={startNodeId}
-            onChange={(event) => {
-              setStartNodeId(event.target.value);
-              clearRoute();
-            }}
-          >
-            {activeStartNodes.map((node) => (
-              <option key={node.value} value={node.value}>
-                {node.label}
-              </option>
-            ))}
-          </select>
-
-          <label className="route-check-row route-check-row--pro">
-            <input
-              type="checkbox"
-              checked={accessibleRoute}
-              onChange={(event) => {
-                setAccessibleRoute(event.target.checked);
-                clearRoute();
-              }}
-            />
-
-            <span className="route-check-custom" />
-            <span>Accessible route only</span>
-          </label>
-        </motion.div>
-      )}
     </motion.div>
   );
 }
