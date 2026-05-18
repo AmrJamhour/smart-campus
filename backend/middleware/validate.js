@@ -59,24 +59,105 @@ const validateFloor = [
 // ─── Room validators ─────────────────────────────────────────
 
 const ROOM_TYPES = [
-  'classroom','lecture_hall','lab','office','corridor',
-  'restroom','elevator','stairs','storage','atrium',
-  'meeting_room','library','cafeteria','other',
+  'classroom',
+  'lecture_hall',
+  'lab',
+  'office',
+  'corridor',
+  'restroom',
+  'bathroom',
+  'elevator',
+  'stairs',
+  'emergency_exit',
+  'storage',
+  'atrium',
+  'meeting_room',
+  'library',
+  'cafeteria',
+  'bookstore',
+  'amphitheater',
+  'professor_lounge',
+  'engineering_drawing_room',
+  'engineering_drawing_studio',
+  'other',
 ];
 
 const validateRoom = [
-  body('floor_id').isUUID().withMessage('Valid floor ID required'),
-  body('room_number').trim().notEmpty().withMessage('Room number required').isLength({ max: 20 }),
-  body('name').trim().notEmpty().withMessage('Room name required').isLength({ max: 200 }),
-  body('type').isIn(ROOM_TYPES).withMessage(`Type must be one of: ${ROOM_TYPES.join(', ')}`),
-  body('capacity').optional().isInt({ min: 1 }).withMessage('Capacity must be a positive integer'),
-  body('coord_x').optional().isFloat({ min: 0, max: 100 }),
-  body('coord_y').optional().isFloat({ min: 0, max: 100 }),
-  body('coord_width').optional().isFloat({ min: 0, max: 100 }),
-  body('coord_height').optional().isFloat({ min: 0, max: 100 }),
+  body('floor_id')
+    .isUUID()
+    .withMessage('Valid floor ID required'),
+
+  body('room_number')
+    .trim()
+    .notEmpty()
+    .withMessage('Room number required')
+    .isLength({ max: 100 })
+    .withMessage('Room number must be at most 100 characters'),
+
+  body('name')
+    .trim()
+    .notEmpty()
+    .withMessage('Room name required')
+    .isLength({ max: 255 })
+    .withMessage('Room name must be at most 255 characters'),
+
+  body('type')
+    .customSanitizer(value => {
+      const type = String(value || 'classroom')
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '_');
+
+      if (type === 'emergency_stairs') return 'emergency_exit';
+
+      return type;
+    })
+    .isIn(ROOM_TYPES)
+    .withMessage(`Type must be one of: ${ROOM_TYPES.join(', ')}`),
+
+  body('department')
+    .optional({ nullable: true, checkFalsy: true })
+    .trim()
+    .isLength({ max: 255 })
+    .withMessage('Department must be at most 255 characters'),
+
+  body('capacity')
+    .optional({ nullable: true, checkFalsy: true })
+    .isInt({ min: 0, max: 32767 })
+    .withMessage('Capacity must be a positive integer or zero'),
+
+  body('description')
+    .optional({ nullable: true, checkFalsy: true })
+    .trim(),
+
+  body('coord_x')
+    .optional({ nullable: true, checkFalsy: true })
+    .isFloat({ min: 0, max: 100 })
+    .withMessage('coord_x must be between 0 and 100'),
+
+  body('coord_y')
+    .optional({ nullable: true, checkFalsy: true })
+    .isFloat({ min: 0, max: 100 })
+    .withMessage('coord_y must be between 0 and 100'),
+
+  body('coord_width')
+    .optional({ nullable: true, checkFalsy: true })
+    .isFloat({ min: 0, max: 100 })
+    .withMessage('coord_width must be between 0 and 100'),
+
+  body('coord_height')
+    .optional({ nullable: true, checkFalsy: true })
+    .isFloat({ min: 0, max: 100 })
+    .withMessage('coord_height must be between 0 and 100'),
+
+  body('is_accessible')
+    .optional()
+    .isBoolean()
+    .withMessage('is_accessible must be boolean')
+    .toBoolean(),
+
   handleValidation,
 ];
-
 // ─── Schedule validators ─────────────────────────────────────
 
 const validateSection = [

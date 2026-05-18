@@ -19,7 +19,7 @@ import {
 } from '../../utils/helpers';
 import toast from 'react-hot-toast';
 
-// ─── Admin Dashboard ──────────────────────────────────────────
+
 // ─── Admin Dashboard ──────────────────────────────────────────
 export function AdminDashboard() {
   const { data, loading } = useAsync(() => userAPI.getStats(), []);
@@ -683,6 +683,9 @@ function FloorFormModal({
 
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const fileInputRef = React.useRef(null);
+  const [selectedMapFile, setSelectedMapFile] = useState(null);
+  
 
   React.useEffect(() => {
     if (!open) return;
@@ -796,29 +799,81 @@ function FloorFormModal({
     };
   };
 
-  const handleSave = async () => {
-    if (!validate()) return;
+  const handleSelectMapFile = (event) => {
+  const file = event.target.files?.[0];
+  event.target.value = '';
 
-    setLoading(true);
+  if (!file) return;
 
-    try {
-      const payload = buildPayload();
+  if (!file.type.startsWith('image/')) {
+    toast.error('Please select an image file.');
+    return;
+  }
 
-      if (isEdit) {
-        await floorAPI.update(existingFloor.id, payload);
-        toast.success('Floor updated');
-      } else {
-        await floorAPI.create(payload);
-        toast.success('Floor created');
-      }
+  setSelectedMapFile(file);
 
-      onSaved();
-    } catch (err) {
-      toast.error(getErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
+  const previewUrl = URL.createObjectURL(file);
+  const image = new Image();
+
+  image.onload = () => {
+    setForm((current) => ({
+      ...current,
+      map_width: image.naturalWidth ? String(image.naturalWidth) : current.map_width,
+      map_height: image.naturalHeight ? String(image.naturalHeight) : current.map_height,
+    }));
+
+    URL.revokeObjectURL(previewUrl);
   };
+
+  image.onerror = () => {
+    URL.revokeObjectURL(previewUrl);
+  };
+
+  image.src = previewUrl;
+};
+  const handleSave = async () => {
+  if (!validate()) return;
+
+  setLoading(true);
+
+  try {
+    const payload = buildPayload();
+
+    let savedFloorId = existingFloor?.id;
+
+    if (isEdit) {
+      await floorAPI.update(existingFloor.id, payload);
+      savedFloorId = existingFloor.id;
+    } else {
+      const response = await floorAPI.create(payload);
+
+      savedFloorId =
+        response?.data?.data?.floor?.id ||
+        response?.data?.floor?.id ||
+        response?.data?.id;
+    }
+
+    if (selectedMapFile && savedFloorId) {
+      await floorAPI.uploadMap(savedFloorId, selectedMapFile);
+    }
+
+    toast.success(
+      selectedMapFile
+        ? isEdit
+          ? 'Floor and map image updated'
+          : 'Floor created and map image uploaded'
+        : isEdit
+          ? 'Floor updated'
+          : 'Floor created'
+    );
+
+    onSaved();
+  } catch (err) {
+    toast.error(getErrorMessage(err));
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <Modal
@@ -883,12 +938,59 @@ function FloorFormModal({
           placeholder="Second Floor — الطابق الثاني"
         />
 
-        <Input
-          label="Map Image URL"
-          value={form.map_image_url}
-          onChange={set('map_image_url')}
-          placeholder="/maps/2.png or /uploads/maps/file.png"
-        />
+      <div className="form-group">
+  <label className="form-label">Map Image</label>
+
+  <div
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+      flexWrap: 'wrap',
+    }}
+  >
+    <button
+      type="button"
+      className="btn btn--secondary"
+      onClick={() => fileInputRef.current?.click()}
+    >
+      {selectedMapFile ? 'Change Map Image' : 'Choose Map Image'}
+    </button>
+
+    <input
+      ref={fileInputRef}
+      type="file"
+      accept="image/png,image/jpeg,image/jpg,image/webp,image/svg+xml"
+      style={{ display: 'none' }}
+      onChange={handleSelectMapFile}
+    />
+
+    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+      {selectedMapFile
+        ? selectedMapFile.name
+        : form.map_image_url
+          ? form.map_image_url
+          : 'No image selected'}
+    </span>
+  </div>
+
+  {form.map_image_url && !selectedMapFile && (
+    <div style={{ marginTop: 8 }}>
+      <img
+        src={form.map_image_url}
+        alt="Current floor map"
+        style={{
+          width: 160,
+          height: 90,
+          objectFit: 'cover',
+          borderRadius: 8,
+          border: '1px solid var(--border)',
+          background: 'var(--bg)',
+        }}
+      />
+    </div>
+  )}
+</div>
 
         <div className="form-row">
           <Input

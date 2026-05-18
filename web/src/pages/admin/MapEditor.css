@@ -164,3 +164,211 @@
   color: var(--text);
   font-size: 13px;
 }
+.mec-design-overlay {
+  position: absolute;
+  inset: 0;
+  width: 1200px;
+  height: 600px;
+  pointer-events: auto;
+}
+
+.mec-design-block {
+  fill: rgba(59, 130, 246, 0.18);
+  stroke: #0b63ff;
+  stroke-width: 4;
+  cursor: pointer;
+  transition: fill 0.15s ease, stroke 0.15s ease, filter 0.15s ease;
+  vector-effect: non-scaling-stroke;
+}
+
+.mec-design-block:hover {
+  fill: rgba(59, 130, 246, 0.28);
+  filter: drop-shadow(0 6px 12px rgba(11, 99, 255, 0.25));
+}
+
+.mec-design-block--selected {
+  fill: rgba(11, 99, 255, 0.28);
+  stroke: #ef4444;
+  stroke-width: 5;
+}
+
+.mec-design-block--connecting {
+  stroke: #f59e0b;
+  stroke-width: 5;
+}
+
+.mec-design-block--lab {
+  fill: rgba(34, 160, 96, 0.22);
+  stroke: #22a060;
+}
+
+.mec-design-block--lecture {
+  fill: rgba(59, 130, 246, 0.20);
+  stroke: #1d4ed8;
+}
+
+.mec-design-block--office {
+  fill: rgba(245, 158, 11, 0.20);
+  stroke: #b45309;
+}
+
+.mec-design-block--restroom {
+  fill: rgba(59, 130, 246, 0.20);
+  stroke: #2563eb;
+}
+
+.mec-design-block--bathroom {
+  fill: rgba(124, 58, 237, 0.20);
+  stroke: #7c3aed;
+}
+
+.mec-design-block--elevator {
+  fill: rgba(139, 92, 246, 0.22);
+  stroke: #8b5cf6;
+}
+
+.mec-design-block--stairs {
+  fill: rgba(239, 68, 68, 0.20);
+  stroke: #ef4444;
+}
+
+.mec-design-label-wrap {
+  pointer-events: none;
+}
+
+.mec-design-label {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 135px;
+  padding: 4px 8px;
+  border-radius: 9px;
+  background: rgba(8, 35, 94, 0.92);
+  color: #ffffff;
+  font-size: 10px;
+  line-height: 1.15;
+  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.18);
+}
+
+.mec-design-label strong {
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.mec-design-label span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: 0.9;
+}
+
+
+.mec-canvas-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.mec-map-img,
+.mec-map-grid {
+  display: block;
+  max-width: none;
+  object-fit: fill;
+}
+
+.mec-design-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: auto;
+}
+
+.mec-design-block {
+  fill: rgba(59, 130, 246, 0.18);
+  stroke: #0b63ff;
+  stroke-width: 4;
+  cursor: grab;
+  transition: fill 0.15s ease, stroke 0.15s ease, filter 0.15s ease;
+  vector-effect: non-scaling-stroke;
+}
+
+.mec-design-block:hover {
+  fill: rgba(59, 130, 246, 0.28);
+  filter: drop-shadow(0 6px 12px rgba(11, 99, 255, 0.25));
+}
+
+.mec-design-block--selected {
+  fill: rgba(11, 99, 255, 0.3);
+  stroke: #ef4444;
+  stroke-width: 5;
+}
+
+.mec-design-block--connecting {
+  stroke: #f59e0b;
+  stroke-width: 5;
+}
+
+.mec-design-block--lab {
+  fill: rgba(34, 160, 96, 0.22);
+  stroke: #22a060;
+}
+
+.mec-design-block--lecture {
+  fill: rgba(59, 130, 246, 0.2);
+  stroke: #1d4ed8;
+}
+
+.mec-design-block--office {
+  fill: rgba(245, 158, 11, 0.2);
+  stroke: #b45309;
+}
+
+.mec-design-block--restroom {
+  fill: rgba(59, 130, 246, 0.2);
+  stroke: #2563eb;
+}
+
+.mec-design-block--bathroom {
+  fill: rgba(124, 58, 237, 0.2);
+  stroke: #7c3aed;
+}
+
+.mec-design-block--elevator {
+  fill: rgba(139, 92, 246, 0.22);
+  stroke: #8b5cf6;
+}
+
+.mec-design-block--stairs {
+  fill: rgba(239, 68, 68, 0.2);
+  stroke: #ef4444;
+}
+
+.mec-design-label-wrap {
+  pointer-events: none;
+}
+
+.mec-design-label {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 155px;
+  padding: 4px 8px;
+  border-radius: 9px;
+  background: rgba(8, 35, 94, 0.92);
+  color: #ffffff;
+  font-size: 10px;
+  line-height: 1.15;
+  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.18);
+}
+
+.mec-design-label strong {
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.mec-design-label span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: 0.9;
+}

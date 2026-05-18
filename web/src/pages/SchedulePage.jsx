@@ -329,7 +329,7 @@ function getMapRoomUrl(item) {
 
   if (!targetRoomNumber) return null;
 
-  return `/map?room=${encodeURIComponent(targetRoomNumber)}`;
+  return `/map?room=${encodeURIComponent(targetRoomNumber)}&source=schedule`;
 }
 function normalizeScheduleRoomNumber(roomNumber) {
   const raw = String(roomNumber || '').trim();

@@ -152,10 +152,20 @@ async function getRoomById(req, res, next) {
 async function createRoom(req, res, next) {
   try {
     const {
-      floor_id, room_number, name, type, department,
-      capacity, description, coord_x, coord_y,
-      coord_width, coord_height, polygon_points,
-      features, is_accessible,
+      floor_id,
+      room_number,
+      name,
+      type,
+      department,
+      capacity,
+      description,
+      coord_x,
+      coord_y,
+      coord_width,
+      coord_height,
+      polygon_points,
+      features,
+      is_accessible,
     } = req.body;
 
     const result = await query(
@@ -165,17 +175,38 @@ async function createRoom(req, res, next) {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        RETURNING *`,
       [
-        floor_id, room_number, name, type, department || null,
-        capacity || null, description || null,
-        coord_x || null, coord_y || null, coord_width || null, coord_height || null,
+        floor_id,
+        room_number,
+        name,
+        type,
+        department ?? null,
+        capacity ?? null,
+        description ?? null,
+        coord_x ?? null,
+        coord_y ?? null,
+        coord_width ?? null,
+        coord_height ?? null,
         polygon_points ? JSON.stringify(polygon_points) : null,
-        features       ? JSON.stringify(features)       : null,
+        features ? JSON.stringify(features) : null,
         is_accessible !== undefined ? is_accessible : true,
       ]
     );
 
-    res.status(201).json({ success: true, data: { room: result.rows[0] } });
+    res.status(201).json({
+      success: true,
+      message: `Room ${result.rows[0].room_number} created.`,
+      data: {
+        room: result.rows[0],
+      },
+    });
   } catch (error) {
+    if (error.code === '23505') {
+      return res.status(409).json({
+        success: false,
+        message: 'A room with this room number already exists on this floor.',
+      });
+    }
+
     next(error);
   }
 }
@@ -185,10 +216,22 @@ async function createRoom(req, res, next) {
 async function updateRoom(req, res, next) {
   try {
     const { id } = req.params;
+
     const allowed = [
-      'room_number','name','type','department','capacity','description',
-      'coord_x','coord_y','coord_width','coord_height','polygon_points',
-      'features','is_accessible','is_active',
+      'room_number',
+      'name',
+      'type',
+      'department',
+      'capacity',
+      'description',
+      'coord_x',
+      'coord_y',
+      'coord_width',
+      'coord_height',
+      'polygon_points',
+      'features',
+      'is_accessible',
+      'is_active',
     ];
 
     const fields = [];
@@ -197,44 +240,127 @@ async function updateRoom(req, res, next) {
 
     for (const key of allowed) {
       if (req.body[key] !== undefined) {
-        fields.push(`${key}=$${idx++}`);
-        const val = (key === 'polygon_points' || key === 'features') && typeof req.body[key] === 'object'
-          ? JSON.stringify(req.body[key])
-          : req.body[key];
+        fields.push(`${key} = $${idx++}`);
+
+        const val =
+          (key === 'polygon_points' || key === 'features') &&
+          typeof req.body[key] === 'object' &&
+          req.body[key] !== null
+            ? JSON.stringify(req.body[key])
+            : req.body[key];
+
         values.push(val);
       }
     }
 
     if (!fields.length) {
-      return res.status(400).json({ success: false, message: 'No fields to update.' });
+      return res.status(400).json({
+        success: false,
+        message: 'No fields to update.',
+      });
     }
 
+    fields.push('updated_at = NOW()');
+
     values.push(id);
+
     const result = await query(
-      `UPDATE rooms SET ${fields.join(',')} WHERE id = $${idx} RETURNING *`,
+      `UPDATE rooms
+       SET ${fields.join(', ')}
+       WHERE id = $${idx}
+       RETURNING *`,
       values
     );
 
     if (!result.rows.length) {
-      return res.status(404).json({ success: false, message: 'Room not found.' });
+      return res.status(404).json({
+        success: false,
+        message: 'Room not found.',
+      });
     }
 
-    res.json({ success: true, data: { room: result.rows[0] } });
+    res.json({
+      success: true,
+      message: `Room ${result.rows[0].room_number} updated.`,
+      data: {
+        room: result.rows[0],
+      },
+    });
   } catch (error) {
+    if (error.code === '23505') {
+      return res.status(409).json({
+        success: false,
+        message: 'A room with this room number already exists on this floor.',
+      });
+    }
+
     next(error);
   }
 }
-
 // ─── Delete room (admin) ─────────────────────────────────────
 
 async function deleteRoom(req, res, next) {
   try {
     const { id } = req.params;
-    const result = await query('DELETE FROM rooms WHERE id = $1 RETURNING id', [id]);
+
+    const result = await withTransaction(async client => {
+      await client.query(
+        `UPDATE users
+         SET office_room_id = NULL
+         WHERE office_room_id = $1`,
+        [id]
+      );
+
+      await client.query(
+        `UPDATE users
+         SET lab_room_id = NULL
+         WHERE lab_room_id = $1`,
+        [id]
+      );
+
+      await client.query(
+        `UPDATE faculty_members
+         SET office_room_id = NULL
+         WHERE office_room_id = $1`,
+        [id]
+      );
+
+      await client.query(
+        `UPDATE sections
+         SET room_id = NULL
+         WHERE room_id = $1`,
+        [id]
+      );
+
+      await client.query(
+        `UPDATE section_meetings
+         SET room_id = NULL
+         WHERE room_id = $1`,
+        [id]
+      );
+
+      const deleted = await client.query(
+        'DELETE FROM rooms WHERE id = $1 RETURNING id, room_number',
+        [id]
+      );
+
+      return deleted;
+    });
+
     if (!result.rows.length) {
-      return res.status(404).json({ success: false, message: 'Room not found.' });
+      return res.status(404).json({
+        success: false,
+        message: 'Room not found.',
+      });
     }
-    res.json({ success: true, message: 'Room deleted.' });
+
+    res.json({
+      success: true,
+      message: `Room ${result.rows[0].room_number} deleted from database.`,
+      data: {
+        deleted_room_id: result.rows[0].id,
+      },
+    });
   } catch (error) {
     next(error);
   }
