@@ -1,11 +1,13 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   userAPI,
   roomAPI,
   scheduleAPI,
   notificationAPI,
-  floorAPI
+  floorAPI,
+  courseAPI,
+  instructorAPI
 } from '../../api/index';
 import { useAsync, useAllSections } from '../../hooks/index';
 import {
@@ -1043,60 +1045,675 @@ function FloorFormModal({
 
 
 
+
+const SEMESTER_OPTIONS = [
+  { value: 'fall', label: 'Fall' },
+  { value: 'spring', label: 'Spring' },
+  { value: 'summer', label: 'Summer' },
+];
+
+const DAY_OPTIONS = [
+  { value: 0, label: 'Sunday' },
+  { value: 1, label: 'Monday' },
+  { value: 2, label: 'Tuesday' },
+  { value: 3, label: 'Wednesday' },
+  { value: 4, label: 'Thursday' },
+  { value: 5, label: 'Friday' },
+  { value: 6, label: 'Saturday' },
+];
+
+function unwrapApiResponse(response) {
+  return response?.data?.data || response?.data || response || {};
+}
+
+function getNextAcademicYear() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const startYear = now.getMonth() >= 7 ? year : year - 1;
+
+  return `${startYear}/${startYear + 1}`;
+}
+
+function getNextSemesterDefault() {
+  const month = new Date().getMonth();
+
+  if (month >= 0 && month <= 4) return 'summer';
+  if (month >= 5 && month <= 7) return 'fall';
+
+  return 'spring';
+}
+
+function emptySectionForm() {
+  return {
+    course_id: '',
+    instructor_id: '',
+    room_id: '',
+    semester: getNextSemesterDefault(),
+    academic_year: getNextAcademicYear(),
+    section_number: '',
+    day_of_week: [],
+    start_time: '',
+    end_time: '',
+    max_capacity: '',
+  };
+}
+
+function normalizeTimeInput(value) {
+  return String(value || '').slice(0, 5);
+}
+
+function sectionToForm(section) {
+  return {
+    course_id: section.course_id || '',
+    instructor_id: section.instructor_id || '',
+    room_id: section.room_id || '',
+    semester: section.semester || getNextSemesterDefault(),
+    academic_year: section.academic_year || getNextAcademicYear(),
+    section_number: section.section_number || '',
+    day_of_week: Array.isArray(section.day_of_week)
+      ? section.day_of_week.map(Number)
+      : [],
+    start_time: normalizeTimeInput(section.start_time),
+    end_time: normalizeTimeInput(section.end_time),
+    max_capacity:
+      section.max_capacity !== null && section.max_capacity !== undefined
+        ? String(section.max_capacity)
+        : '',
+  };
+}
+
 // ─── Admin Schedule ───────────────────────────────────────────
 export function AdminSchedule() {
-  const [page,       setPage]      = useState(1);
+  const [page, setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
-  const [editSec,    setEditSec]   = useState(null);
-  const [delSec,     setDelSec]    = useState(null);
-  const [delLoading, setDelLoading]= useState(false);
+  const [editSec, setEditSec] = useState(null);
+  const [delSec, setDelSec] = useState(null);
+  const [delLoading, setDelLoading] = useState(false);
 
-  const { sections, pagination, loading, refetch } = useAllSections({ page, limit: 20 });
+  const [filters, setFilters] = useState({
+    semester: getNextSemesterDefault(),
+    academic_year: getNextAcademicYear(),
+  });
+
+  const { sections, pagination, loading, refetch } = useAllSections({
+    page,
+    limit: 20,
+    semester: filters.semester || undefined,
+    academic_year: filters.academic_year || undefined,
+  });
 
   const handleDelete = async () => {
+    if (!delSec?.id) return;
+
     setDelLoading(true);
+
     try {
       await scheduleAPI.delete(delSec.id);
-      toast.success('Section deleted');
+      toast.success('Doctor schedule deleted');
       setDelSec(null);
       refetch();
-    } catch (err) { toast.error(getErrorMessage(err)); }
-    finally { setDelLoading(false); }
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setDelLoading(false);
+    }
   };
 
   const columns = [
-    { key: 'course_code', label: 'Course', render: (v, r) => (
-      <div><div style={{ fontWeight: 600 }}>{v}</div><div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{r.course_name}</div></div>
-    )},
-    { key: 'section_number', label: 'Section', render: v => <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{v}</span> },
-    { key: 'days', label: 'Days', render: (_, r) => daysArrayToString(r.day_of_week) },
-    { key: 'time', label: 'Time', render: (_, r) => `${formatTime(r.start_time)} – ${formatTime(r.end_time)}` },
-    { key: 'room_number', label: 'Room', render: (v, r) => v ? <Badge variant="gray">Room {v}</Badge> : '—' },
-    { key: 'instructor_name', label: 'Instructor', render: v => v || '—' },
-    { key: 'enrolled', label: 'Enrolled', render: (v, r) => `${v}${r.max_capacity ? `/${r.max_capacity}` : ''}` },
-    { key: 'actions', label: '', render: (_, r) => (
-      <div style={{ display: 'flex', gap: 4 }}>
-        <button className="btn btn--ghost btn--sm btn--icon" onClick={() => setEditSec(r)}><EditIcon /></button>
-        <button className="btn btn--ghost btn--sm btn--icon" onClick={() => setDelSec(r)} style={{ color: 'var(--red)' }}><TrashIcon /></button>
-      </div>
-    )},
+    {
+      key: 'course_code',
+      label: 'Course',
+      render: (v, r) => (
+        <div>
+          <div style={{ fontWeight: 600 }}>{v}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            {r.course_name}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'section_number',
+      label: 'Section',
+      render: v => (
+        <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>
+          {v}
+        </span>
+      ),
+    },
+    {
+      key: 'semester',
+      label: 'Semester',
+      render: (v, r) => (
+        <Badge variant="blue">
+          {semesterLabel?.(v) || v} {r.academic_year}
+        </Badge>
+      ),
+    },
+    {
+      key: 'days',
+      label: 'Days',
+      render: (_, r) => daysArrayToString(r.day_of_week),
+    },
+    {
+      key: 'time',
+      label: 'Time',
+      render: (_, r) => `${formatTime(r.start_time)} – ${formatTime(r.end_time)}`,
+    },
+    {
+      key: 'room_number',
+      label: 'Room',
+      render: v => (v ? <Badge variant="gray">Room {v}</Badge> : '—'),
+    },
+    {
+      key: 'instructor_name',
+      label: 'Doctor',
+      render: v => v || '—',
+    },
+    {
+      key: 'enrolled',
+      label: 'Enrolled',
+      render: (v, r) => `${v}${r.max_capacity ? `/${r.max_capacity}` : ''}`,
+    },
+    {
+      key: 'actions',
+      label: '',
+      render: (_, r) => (
+        <div style={{ display: 'flex', gap: 4 }}>
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm btn--icon"
+            onClick={() => setEditSec(r)}
+            title="Edit schedule"
+          >
+            <EditIcon />
+          </button>
+
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm btn--icon"
+            onClick={() => setDelSec(r)}
+            style={{ color: 'var(--red)' }}
+            title="Delete schedule"
+          >
+            <TrashIcon />
+          </button>
+        </div>
+      ),
+    },
   ];
 
   return (
     <div>
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div><h1 className="page-title">Schedule Management</h1><p className="page-sub">Manage course sections and room assignments</p></div>
-        <Button variant="primary" icon={<PlusIcon />} onClick={() => setShowCreate(true)}>Add Section</Button>
+      <div
+        className="page-header"
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+        }}
+      >
+        <div>
+          <h1 className="page-title">Doctor Schedule Management</h1>
+          <p className="page-sub">
+            Create and manage doctors&apos; teaching schedules for the next semester
+          </p>
+        </div>
+
+        <Button
+          variant="primary"
+          icon={<PlusIcon />}
+          onClick={() => setShowCreate(true)}
+        >
+          Add Doctor Schedule
+        </Button>
       </div>
+
+      <div
+        className="card card--sm"
+        style={{
+          marginBottom: 'var(--space-lg)',
+          display: 'flex',
+          gap: 10,
+          flexWrap: 'wrap',
+          alignItems: 'center',
+        }}
+      >
+        <Select
+          label="Semester"
+          value={filters.semester}
+          onChange={event => {
+            setFilters(current => ({
+              ...current,
+              semester: event.target.value,
+            }));
+            setPage(1);
+          }}
+          options={SEMESTER_OPTIONS}
+          style={{ width: 180 }}
+        />
+
+        <Input
+          label="Academic Year"
+          value={filters.academic_year}
+          onChange={event => {
+            setFilters(current => ({
+              ...current,
+              academic_year: event.target.value,
+            }));
+            setPage(1);
+          }}
+          placeholder="2026/2027"
+          style={{ width: 180 }}
+        />
+      </div>
+
       <div className="card card--no-pad">
-        <Table columns={columns} data={sections} loading={loading} emptyMessage="No sections found" />
-        <div style={{ padding: '0 16px' }}><Pagination pagination={pagination} onPageChange={setPage} /></div>
+        <Table
+          columns={columns}
+          data={sections}
+          loading={loading}
+          emptyMessage="No doctor schedules found for this semester"
+        />
+
+        <div style={{ padding: '0 16px' }}>
+          <Pagination pagination={pagination} onPageChange={setPage} />
+        </div>
       </div>
-      <ConfirmDialog open={!!delSec} onClose={() => setDelSec(null)} onConfirm={handleDelete} loading={delLoading} danger
-        title="Delete Section" message={`Delete section "${delSec?.course_code} - ${delSec?.section_number}"?`} />
+
+      <SectionFormModal
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        onSaved={() => {
+          setShowCreate(false);
+          refetch();
+        }}
+        defaultSemester={filters.semester}
+        defaultAcademicYear={filters.academic_year}
+        title="Add Doctor Schedule"
+      />
+
+      <SectionFormModal
+        open={!!editSec}
+        onClose={() => setEditSec(null)}
+        existingSection={editSec}
+        onSaved={() => {
+          setEditSec(null);
+          refetch();
+        }}
+        defaultSemester={filters.semester}
+        defaultAcademicYear={filters.academic_year}
+        title="Edit Doctor Schedule"
+      />
+
+      <ConfirmDialog
+        open={!!delSec}
+        onClose={() => setDelSec(null)}
+        onConfirm={handleDelete}
+        loading={delLoading}
+        danger
+        title="Delete Doctor Schedule"
+        message={`Delete schedule "${delSec?.course_code} - ${delSec?.section_number}"?`}
+      />
     </div>
   );
 }
+
+function SectionFormModal({
+  open,
+  onClose,
+  existingSection,
+  onSaved,
+  defaultSemester,
+  defaultAcademicYear,
+  title,
+}) {
+  const isEdit = Boolean(existingSection?.id);
+
+  const [form, setForm] = useState(emptySectionForm());
+  const [loading, setLoading] = useState(false);
+  const [lookupsLoading, setLookupsLoading] = useState(false);
+  const [courses, setCourses] = useState([]);
+  const [instructors, setInstructors] = useState([]);
+  const [rooms, setRooms] = useState([]);
+  const [errors, setErrors] = useState({});
+
+  const loadLookups = useCallback(async () => {
+    setLookupsLoading(true);
+
+    try {
+      const [coursesResponse, instructorsResponse, roomsResponse] =
+        await Promise.all([
+          courseAPI.getAll({ limit: 1000 }),
+          instructorAPI.getAll({ limit: 1000, active_only: 'true' }),
+          roomAPI.getAll({ limit: 2000, active_only: 'true' }),
+        ]);
+
+      const coursesPayload = unwrapApiResponse(coursesResponse);
+      const instructorsPayload = unwrapApiResponse(instructorsResponse);
+      const roomsPayload = unwrapApiResponse(roomsResponse);
+
+      setCourses(coursesPayload.courses || []);
+      setInstructors(instructorsPayload.instructors || []);
+      setRooms(roomsPayload.rooms || []);
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setLookupsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+
+    loadLookups();
+
+    if (existingSection) {
+      setForm(sectionToForm(existingSection));
+    } else {
+      setForm({
+        ...emptySectionForm(),
+        semester: defaultSemester || getNextSemesterDefault(),
+        academic_year: defaultAcademicYear || getNextAcademicYear(),
+      });
+    }
+
+    setErrors({});
+  }, [
+    open,
+    existingSection,
+    defaultSemester,
+    defaultAcademicYear,
+    loadLookups,
+  ]);
+
+  const set = key => event => {
+    setForm(current => ({
+      ...current,
+      [key]: event.target.value,
+    }));
+  };
+
+  const toggleDay = day => {
+    setForm(current => {
+      const currentDays = Array.isArray(current.day_of_week)
+        ? current.day_of_week
+        : [];
+
+      const exists = currentDays.includes(day);
+
+      return {
+        ...current,
+        day_of_week: exists
+          ? currentDays.filter(item => item !== day)
+          : [...currentDays, day].sort((a, b) => a - b),
+      };
+    });
+  };
+
+  const validate = () => {
+    const nextErrors = {};
+
+    if (!form.course_id) nextErrors.course_id = 'Course is required.';
+    if (!form.instructor_id) nextErrors.instructor_id = 'Doctor is required.';
+    if (!form.section_number.trim()) {
+      nextErrors.section_number = 'Section number is required.';
+    }
+
+    if (!form.semester) nextErrors.semester = 'Semester is required.';
+
+    if (!/^\d{4}\/\d{4}$/.test(form.academic_year || '')) {
+      nextErrors.academic_year = 'Academic year must be like 2026/2027.';
+    }
+
+    if (!Array.isArray(form.day_of_week) || !form.day_of_week.length) {
+      nextErrors.day_of_week = 'Choose at least one day.';
+    }
+
+    if (!form.start_time) nextErrors.start_time = 'Start time is required.';
+    if (!form.end_time) nextErrors.end_time = 'End time is required.';
+
+    if (form.start_time && form.end_time && form.start_time >= form.end_time) {
+      nextErrors.end_time = 'End time must be after start time.';
+    }
+
+    if (
+      String(form.max_capacity || '').trim() &&
+      Number(form.max_capacity) < 0
+    ) {
+      nextErrors.max_capacity = 'Capacity must be zero or more.';
+    }
+
+    setErrors(nextErrors);
+
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const buildPayload = () => ({
+    course_id: form.course_id,
+    instructor_id: form.instructor_id || null,
+    room_id: form.room_id || null,
+    semester: form.semester,
+    academic_year: form.academic_year,
+    section_number: String(form.section_number || '').trim(),
+    day_of_week: form.day_of_week.map(Number),
+    start_time: form.start_time,
+    end_time: form.end_time,
+    max_capacity: form.max_capacity ? Number(form.max_capacity) : null,
+  });
+
+  const handleSave = async () => {
+    if (!validate()) return;
+
+    setLoading(true);
+
+    try {
+      const payload = buildPayload();
+
+      if (isEdit) {
+        await scheduleAPI.update(existingSection.id, payload);
+        toast.success('Doctor schedule updated');
+      } else {
+        await scheduleAPI.create(payload);
+        toast.success('Doctor schedule created');
+      }
+
+      onSaved();
+    } catch (err) {
+      const message =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        getErrorMessage(err);
+
+      toast.error(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const courseOptions = courses.map(course => ({
+    value: course.id,
+    label: `${course.code} — ${course.name}`,
+  }));
+
+  const instructorOptions = instructors.map(instructor => ({
+    value: instructor.id,
+    label:
+      instructor.instructor_name ||
+      `${instructor.title || ''} ${instructor.first_name || ''} ${
+        instructor.last_name || ''
+      }`.trim() ||
+      instructor.email,
+  }));
+
+  const roomOptions = rooms.map(room => ({
+    value: room.id,
+    label: `${room.room_number} — ${room.name || 'Room'}`,
+  }));
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={title}
+      size="lg"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+
+          <Button
+            variant="primary"
+            loading={loading}
+            onClick={handleSave}
+            disabled={lookupsLoading}
+          >
+            Save Schedule
+          </Button>
+        </>
+      }
+    >
+      {lookupsLoading ? (
+        <Spinner center />
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="form-row">
+            <Select
+              label="Course"
+              required
+              value={form.course_id}
+              onChange={set('course_id')}
+              options={courseOptions}
+              placeholder="Select course…"
+              error={errors.course_id}
+            />
+
+            <Select
+              label="Doctor"
+              required
+              value={form.instructor_id}
+              onChange={set('instructor_id')}
+              options={instructorOptions}
+              placeholder="Select doctor…"
+              error={errors.instructor_id}
+            />
+          </div>
+
+          <div className="form-row">
+            <Input
+              label="Section Number"
+              required
+              value={form.section_number}
+              onChange={set('section_number')}
+              placeholder="1"
+              error={errors.section_number}
+            />
+
+            <Select
+              label="Room"
+              value={form.room_id}
+              onChange={set('room_id')}
+              options={roomOptions}
+              placeholder="No room yet"
+            />
+          </div>
+
+          <div className="form-row">
+            <Select
+              label="Semester"
+              required
+              value={form.semester}
+              onChange={set('semester')}
+              options={SEMESTER_OPTIONS}
+              error={errors.semester}
+            />
+
+            <Input
+              label="Academic Year"
+              required
+              value={form.academic_year}
+              onChange={set('academic_year')}
+              placeholder="2026/2027"
+              error={errors.academic_year}
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Days *</label>
+
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 8,
+              }}
+            >
+              {DAY_OPTIONS.map(day => (
+                <label
+                  key={day.value}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '8px 10px',
+                    border: '1px solid var(--border)',
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    background: form.day_of_week.includes(day.value)
+                      ? 'var(--najah-blue-50)'
+                      : 'var(--card)',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={form.day_of_week.includes(day.value)}
+                    onChange={() => toggleDay(day.value)}
+                  />
+                  {day.label}
+                </label>
+              ))}
+            </div>
+
+            {errors.day_of_week && (
+              <div className="form-error">{errors.day_of_week}</div>
+            )}
+          </div>
+
+          <div className="form-row">
+            <Input
+              label="Start Time"
+              type="time"
+              required
+              value={form.start_time}
+              onChange={set('start_time')}
+              error={errors.start_time}
+            />
+
+            <Input
+              label="End Time"
+              type="time"
+              required
+              value={form.end_time}
+              onChange={set('end_time')}
+              error={errors.end_time}
+            />
+
+            <Input
+              label="Max Capacity"
+              type="number"
+              value={form.max_capacity}
+              onChange={set('max_capacity')}
+              placeholder="Optional"
+              error={errors.max_capacity}
+            />
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 
 // ─── Admin Notifications ──────────────────────────────────────
 export function AdminNotifications() {

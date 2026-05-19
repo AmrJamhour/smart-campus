@@ -1,6 +1,165 @@
 const { query, withTransaction } = require('../config/db');
+
 const DASHBOARD_SEMESTER = 'spring';
 const DASHBOARD_ACADEMIC_YEAR = '2025/2026';
+
+function toIntArrayLiteral(days) {
+  const cleanDays = Array.isArray(days)
+    ? days.map(Number).filter(day => Number.isInteger(day) && day >= 0 && day <= 6)
+    : [];
+
+  return `{${cleanDays.join(',')}}`;
+}
+
+function normalizeTime(value) {
+  return String(value || '').slice(0, 5);
+}
+
+async function checkSectionConflicts({
+  room_id,
+  instructor_id,
+  semester,
+  academic_year,
+  day_of_week,
+  start_time,
+  end_time,
+  excludeSectionId = null,
+}) {
+  const dayArray = Array.isArray(day_of_week) ? day_of_week.map(Number) : [];
+  const dayLiteral = toIntArrayLiteral(dayArray);
+  const start = normalizeTime(start_time);
+  const end = normalizeTime(end_time);
+
+  if (!semester || !academic_year || !dayArray.length || !start || !end) {
+    return null;
+  }
+
+  const excludeSql = excludeSectionId ? 'AND s.id <> $7' : '';
+
+  if (room_id) {
+    const params = excludeSectionId
+      ? [room_id, semester, academic_year, dayLiteral, start, end, excludeSectionId]
+      : [room_id, semester, academic_year, dayLiteral, start, end];
+
+    const roomConflict = await query(
+      `
+      SELECT s.id, c.code AS course_code, c.name AS course_name
+      FROM sections s
+      JOIN courses c ON c.id = s.course_id
+      WHERE s.is_active = TRUE
+        AND s.room_id = $1
+        AND s.semester = $2
+        AND s.academic_year = $3
+        AND s.day_of_week && $4::int[]
+        AND NOT (s.end_time <= $5 OR s.start_time >= $6)
+        ${excludeSql}
+      LIMIT 1
+      `,
+      params
+    );
+
+    if (roomConflict.rows.length) {
+      return 'Room is already booked during this time slot.';
+    }
+
+    const meetingRoomConflict = await query(
+      `
+      SELECT s.id, c.code AS course_code, c.name AS course_name
+      FROM sections s
+      JOIN courses c ON c.id = s.course_id
+      JOIN section_meetings sm ON sm.section_id = s.id
+      WHERE s.is_active = TRUE
+        AND COALESCE(sm.room_id, s.room_id) = $1
+        AND s.semester = $2
+        AND s.academic_year = $3
+        AND sm.day_of_week = ANY($4::int[])
+        AND NOT (sm.end_time <= $5 OR sm.start_time >= $6)
+        ${excludeSql}
+      LIMIT 1
+      `,
+      params
+    );
+
+    if (meetingRoomConflict.rows.length) {
+      return 'Room is already booked during this time slot.';
+    }
+  }
+
+  if (instructor_id) {
+    const params = excludeSectionId
+      ? [instructor_id, semester, academic_year, dayLiteral, start, end, excludeSectionId]
+      : [instructor_id, semester, academic_year, dayLiteral, start, end];
+
+    const instructorConflict = await query(
+      `
+      SELECT s.id, c.code AS course_code, c.name AS course_name
+      FROM sections s
+      JOIN courses c ON c.id = s.course_id
+      WHERE s.is_active = TRUE
+        AND s.instructor_id = $1
+        AND s.semester = $2
+        AND s.academic_year = $3
+        AND s.day_of_week && $4::int[]
+        AND NOT (s.end_time <= $5 OR s.start_time >= $6)
+        ${excludeSql}
+      LIMIT 1
+      `,
+      params
+    );
+
+    if (instructorConflict.rows.length) {
+      return 'Doctor already has another schedule during this time slot.';
+    }
+
+    const meetingInstructorConflict = await query(
+      `
+      SELECT s.id, c.code AS course_code, c.name AS course_name
+      FROM sections s
+      JOIN courses c ON c.id = s.course_id
+      JOIN section_meetings sm ON sm.section_id = s.id
+      WHERE s.is_active = TRUE
+        AND s.instructor_id = $1
+        AND s.semester = $2
+        AND s.academic_year = $3
+        AND sm.day_of_week = ANY($4::int[])
+        AND NOT (sm.end_time <= $5 OR sm.start_time >= $6)
+        ${excludeSql}
+      LIMIT 1
+      `,
+      params
+    );
+
+    if (meetingInstructorConflict.rows.length) {
+      return 'Doctor already has another schedule during this time slot.';
+    }
+  }
+
+  return null;
+}
+
+async function insertSectionMeetings(client, section) {
+  const days = Array.isArray(section.day_of_week)
+    ? section.day_of_week.map(Number).filter(day => Number.isInteger(day))
+    : [];
+
+  for (const day of days) {
+    await client.query(
+      `
+      INSERT INTO section_meetings
+        (section_id, room_id, day_of_week, start_time, end_time, meeting_type)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      `,
+      [
+        section.id,
+        section.room_id || null,
+        day,
+        section.start_time,
+        section.end_time,
+        'lecture',
+      ]
+    );
+  }
+}
 
 // ─── Get student's full schedule ─────────────────────────────
 async function getMySchedule(req, res, next) {
@@ -122,7 +281,6 @@ async function getMySchedule(req, res, next) {
           academic_year: row.academic_year,
           enrolled: row.enrolled,
           max_capacity: row.max_capacity,
-          
 
           course_id: row.course_id,
           course_code: row.course_code,
@@ -202,10 +360,6 @@ async function getMySchedule(req, res, next) {
     next(error);
   }
 }
-
-// ─── Get today's schedule ────────────────────────────────────
-
-// ─── Get today's schedule ────────────────────────────────────
 
 async function getTodaySchedule(req, res, next) {
   try {
@@ -295,8 +449,6 @@ async function getTodaySchedule(req, res, next) {
   }
 }
 
-// ─── Get all sections (admin / public) ───────────────────────
-
 async function getAllSections(req, res, next) {
   try {
     const {
@@ -310,6 +462,7 @@ async function getAllSections(req, res, next) {
         s.*,
         c.code AS course_code, c.name AS course_name, c.department,
         i.title || ' ' || i.first_name || ' ' || i.last_name AS instructor_name,
+        i.email AS instructor_email,
         r.room_number, r.name AS room_name,
         f.floor_label, b.code AS building_code
       FROM sections s
@@ -359,63 +512,130 @@ async function getAllSections(req, res, next) {
   }
 }
 
-// ─── Create section (admin) ───────────────────────────────────
-
 async function createSection(req, res, next) {
   try {
     const {
-      course_id, instructor_id, room_id, semester,
-      academic_year, section_number, day_of_week,
-      start_time, end_time, max_capacity,
+      course_id,
+      instructor_id,
+      room_id,
+      semester,
+      academic_year,
+      section_number,
+      day_of_week,
+      start_time,
+      end_time,
+      max_capacity,
     } = req.body;
 
-    // Conflict check — same room, overlapping time, same day
-    if (room_id) {
-      const conflict = await query(
-        `SELECT s.id FROM sections s
-         WHERE s.room_id = $1
-           AND s.is_active = TRUE
-           AND s.semester = $2
-           AND s.academic_year = $3
-           AND s.day_of_week && $4::int[]
-           AND NOT (s.end_time <= $5 OR s.start_time >= $6)`,
-        [room_id, semester, academic_year, `{${day_of_week.join(',')}}`, start_time, end_time]
-      );
-      if (conflict.rows.length) {
-        return res.status(409).json({
-          success: false,
-          message: 'Room is already booked during this time slot.',
-        });
-      }
+    const conflictMessage = await checkSectionConflicts({
+      room_id,
+      instructor_id,
+      semester,
+      academic_year,
+      day_of_week,
+      start_time,
+      end_time,
+    });
+
+    if (conflictMessage) {
+      return res.status(409).json({
+        success: false,
+        message: conflictMessage,
+      });
     }
 
-    const result = await query(
-      `INSERT INTO sections
-         (course_id, instructor_id, room_id, semester, academic_year,
-          section_number, day_of_week, start_time, end_time, max_capacity)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-       RETURNING *`,
-      [
-        course_id, instructor_id || null, room_id || null, semester,
-        academic_year, section_number, day_of_week,
-        start_time, end_time, max_capacity || null,
-      ]
-    );
+    const section = await withTransaction(async client => {
+      const result = await client.query(
+        `INSERT INTO sections
+           (course_id, instructor_id, room_id, semester, academic_year,
+            section_number, day_of_week, start_time, end_time, max_capacity)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         RETURNING *`,
+        [
+          course_id,
+          instructor_id || null,
+          room_id || null,
+          semester,
+          academic_year,
+          section_number,
+          day_of_week,
+          start_time,
+          end_time,
+          max_capacity || null,
+        ]
+      );
 
-    res.status(201).json({ success: true, data: { section: result.rows[0] } });
+      await insertSectionMeetings(client, result.rows[0]);
+
+      return result.rows[0];
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Doctor schedule created successfully.',
+      data: { section },
+    });
   } catch (error) {
     next(error);
   }
 }
 
-// ─── Update section (admin) ───────────────────────────────────
-
 async function updateSection(req, res, next) {
   try {
     const { id } = req.params;
+
+    const currentResult = await query(
+      'SELECT * FROM sections WHERE id = $1 AND is_active = TRUE',
+      [id]
+    );
+
+    if (!currentResult.rows.length) {
+      return res.status(404).json({ success: false, message: 'Section not found.' });
+    }
+
+    const current = currentResult.rows[0];
+    const merged = {
+      ...current,
+      ...req.body,
+      day_of_week: req.body.day_of_week || current.day_of_week,
+      start_time: req.body.start_time || current.start_time,
+      end_time: req.body.end_time || current.end_time,
+      room_id: req.body.room_id !== undefined ? req.body.room_id : current.room_id,
+      instructor_id: req.body.instructor_id !== undefined ? req.body.instructor_id : current.instructor_id,
+      semester: req.body.semester || current.semester,
+      academic_year: req.body.academic_year || current.academic_year,
+    };
+
+    const conflictMessage = await checkSectionConflicts({
+      room_id: merged.room_id,
+      instructor_id: merged.instructor_id,
+      semester: merged.semester,
+      academic_year: merged.academic_year,
+      day_of_week: merged.day_of_week,
+      start_time: merged.start_time,
+      end_time: merged.end_time,
+      excludeSectionId: id,
+    });
+
+    if (conflictMessage) {
+      return res.status(409).json({
+        success: false,
+        message: conflictMessage,
+      });
+    }
+
     const allowed = [
-      'instructor_id','room_id','section_number','day_of_week',
-      'start_time','end_time','max_capacity','is_active',
+      'course_id',
+      'instructor_id',
+      'room_id',
+      'semester',
+      'academic_year',
+      'section_number',
+      'day_of_week',
+      'start_time',
+      'end_time',
+      'max_capacity',
+      'is_active',
     ];
 
     const fields = [];
@@ -433,53 +653,73 @@ async function updateSection(req, res, next) {
       return res.status(400).json({ success: false, message: 'No fields to update.' });
     }
 
-    values.push(id);
-    const result = await query(
-      `UPDATE sections SET ${fields.join(',')} WHERE id = $${idx} RETURNING *`,
-      values
-    );
+    const updated = await withTransaction(async client => {
+      values.push(id);
 
-    if (!result.rows.length) {
-      return res.status(404).json({ success: false, message: 'Section not found.' });
-    }
+      const result = await client.query(
+        `UPDATE sections SET ${fields.join(',')} WHERE id = $${idx} RETURNING *`,
+        values
+      );
 
-    res.json({ success: true, data: { section: result.rows[0] } });
+      const changedMeeting =
+        req.body.room_id !== undefined ||
+        req.body.day_of_week !== undefined ||
+        req.body.start_time !== undefined ||
+        req.body.end_time !== undefined;
+
+      if (changedMeeting) {
+        await client.query('DELETE FROM section_meetings WHERE section_id = $1', [id]);
+        await insertSectionMeetings(client, result.rows[0]);
+      }
+
+      return result.rows[0];
+    });
+
+    res.json({
+      success: true,
+      message: 'Doctor schedule updated successfully.',
+      data: { section: updated },
+    });
   } catch (error) {
     next(error);
   }
 }
 
-// ─── Delete section (admin) ───────────────────────────────────
-
 async function deleteSection(req, res, next) {
   try {
     const { id } = req.params;
-    const result = await query('DELETE FROM sections WHERE id = $1 RETURNING id', [id]);
-    if (!result.rows.length) {
-      return res.status(404).json({ success: false, message: 'Section not found.' });
-    }
+
+    await withTransaction(async client => {
+      await client.query('DELETE FROM section_meetings WHERE section_id = $1', [id]);
+      const result = await client.query('DELETE FROM sections WHERE id = $1 RETURNING id', [id]);
+
+      if (!result.rows.length) {
+        throw Object.assign(new Error('Section not found.'), { statusCode: 404 });
+      }
+    });
+
     res.json({ success: true, message: 'Section deleted.' });
   } catch (error) {
     next(error);
   }
 }
 
-// ─── Enroll student ───────────────────────────────────────────
-
 async function enrollStudent(req, res, next) {
   try {
     const { section_id } = req.body;
-    const student_id     = req.user.id;
+    const student_id = req.user.id;
 
-    // Check section exists and has capacity
     const sec = await query(
       'SELECT id, max_capacity, enrolled FROM sections WHERE id = $1 AND is_active = TRUE',
       [section_id]
     );
+
     if (!sec.rows.length) {
       return res.status(404).json({ success: false, message: 'Section not found.' });
     }
+
     const { max_capacity, enrolled } = sec.rows[0];
+
     if (max_capacity && enrolled >= max_capacity) {
       return res.status(409).json({ success: false, message: 'Section is full.' });
     }
@@ -492,6 +732,7 @@ async function enrollStudent(req, res, next) {
            DO UPDATE SET status = 'enrolled', updated_at = NOW()`,
         [student_id, section_id]
       );
+
       await client.query(
         'UPDATE sections SET enrolled = enrolled + 1 WHERE id = $1',
         [section_id]
@@ -504,12 +745,10 @@ async function enrollStudent(req, res, next) {
   }
 }
 
-// ─── Drop enrollment ──────────────────────────────────────────
-
 async function dropEnrollment(req, res, next) {
   try {
     const { section_id } = req.params;
-    const student_id     = req.user.id;
+    const student_id = req.user.id;
 
     await withTransaction(async client => {
       const result = await client.query(
@@ -518,9 +757,11 @@ async function dropEnrollment(req, res, next) {
          RETURNING id`,
         [student_id, section_id]
       );
+
       if (!result.rows.length) {
         throw Object.assign(new Error('Enrollment not found.'), { statusCode: 404 });
       }
+
       await client.query(
         'UPDATE sections SET enrolled = GREATEST(enrolled - 1, 0) WHERE id = $1',
         [section_id]
@@ -534,7 +775,12 @@ async function dropEnrollment(req, res, next) {
 }
 
 module.exports = {
-  getMySchedule, getTodaySchedule, getAllSections,
-  createSection, updateSection, deleteSection,
-  enrollStudent, dropEnrollment,
+  getMySchedule,
+  getTodaySchedule,
+  getAllSections,
+  createSection,
+  updateSection,
+  deleteSection,
+  enrollStudent,
+  dropEnrollment,
 };
