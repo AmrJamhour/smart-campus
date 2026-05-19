@@ -4,6 +4,7 @@ import {
   userAPI,
   roomAPI,
   scheduleAPI,
+  announcementAPI,
   notificationAPI,
   floorAPI,
   courseAPI,
@@ -127,6 +128,7 @@ export function AdminDashboard() {
               { to: '/admin/rooms', label: 'Manage Rooms' },
               { to: '/admin/map-editor', label: '✏️ Open Map Editor' },
               { to: '/admin/schedule', label: 'Manage Schedule' },
+              { to: '/admin/announcements', label: '📢 Manage Announcements' },
               { to: '/admin/notifications', label: '🔔 Send Notification' },
               { to: '/admin/users', label: 'Manage Users' }
             ].map((action) => (
@@ -1710,6 +1712,541 @@ function SectionFormModal({
           </div>
         </div>
       )}
+    </Modal>
+  );
+}
+
+
+// ─── Admin Announcements ─────────────────────────────────────
+const ANNOUNCEMENT_TARGETS = [
+  { value: 'all', label: 'Everyone' },
+  { value: 'students', label: 'Students' },
+  { value: 'professors', label: 'Professors' },
+];
+
+function normalizeDepartmentOptions(raw) {
+  const payload = raw?.data?.data || raw?.data || raw || {};
+
+  const list = Array.isArray(payload?.departments)
+    ? payload.departments
+    : Array.isArray(raw?.departments)
+      ? raw.departments
+      : Array.isArray(raw)
+        ? raw
+        : [];
+
+  return list
+    .map(item => {
+      if (typeof item === 'string') return item;
+      return item.department || item.name || item.value || '';
+    })
+    .map(value => String(value || '').trim())
+    .filter(Boolean)
+    .filter((value, index, arr) => arr.indexOf(value) === index)
+    .sort((a, b) => a.localeCompare(b, 'en'));
+}
+
+function targetRoleLabel(value) {
+  return ANNOUNCEMENT_TARGETS.find(item => item.value === value)?.label || 'Everyone';
+}
+
+export function AdminAnnouncements() {
+  const [page, setPage] = useState(1);
+  const [showCreate, setShowCreate] = useState(false);
+  const [editAnnouncement, setEditAnnouncement] = useState(null);
+  const [delAnnouncement, setDelAnnouncement] = useState(null);
+  const [delLoading, setDelLoading] = useState(false);
+
+  const { data, loading, refetch } = useAsync(
+    () => announcementAPI.getAll({ page, limit: 20 }),
+    [page]
+  );
+
+  const announcements = data?.announcements || [];
+  const pagination = data?.pagination;
+
+  const handleDelete = async () => {
+    if (!delAnnouncement?.id) return;
+
+    setDelLoading(true);
+    try {
+      await announcementAPI.delete(delAnnouncement.id);
+      toast.success('Announcement deleted');
+      setDelAnnouncement(null);
+      refetch();
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setDelLoading(false);
+    }
+  };
+
+  const columns = [
+    {
+      key: 'title',
+      label: 'Title',
+      render: (value, row) => (
+        <div>
+          <div style={{ fontWeight: 700 }}>{value}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            {String(row.content || '').slice(0, 90)}{String(row.content || '').length > 90 ? '…' : ''}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'target_role',
+      label: 'Recipients',
+      render: (_, row) => (
+        <div>
+          <Badge variant={row.target_role === 'professors' ? 'amber' : row.target_role === 'students' ? 'blue' : 'green'}>
+            {targetRoleLabel(row.target_role || 'all')}
+          </Badge>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+            {row.target_department === 'all' || !row.target_department
+              ? 'All departments'
+              : row.target_department}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'is_published',
+      label: 'Status',
+      render: (_, row) => {
+        const status = getAnnouncementStatus(row);
+
+        return (
+          <Badge variant={status.variant}>
+            {status.label}
+          </Badge>
+        );
+      },
+    },
+    {
+      key: 'published_at',
+      label: 'Spread Time',
+      render: value => value ? formatDate(value) : '—',
+    },
+    {
+      key: 'is_pinned',
+      label: 'Pinned',
+      render: value => (value ? '📌' : '—'),
+    },
+    {
+      key: 'expires_at',
+      label: 'Expires',
+      render: value => value ? formatDate(value) : '—',
+    },
+    {
+      key: 'created_at',
+      label: 'Created',
+      render: value => formatDate(value),
+    },
+    {
+      key: 'actions',
+      label: '',
+      render: (_, row) => (
+        <div style={{ display: 'flex', gap: 4 }}>
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm btn--icon"
+            onClick={() => setEditAnnouncement(row)}
+            title="Edit"
+          >
+            <EditIcon />
+          </button>
+
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm btn--icon"
+            onClick={() => setDelAnnouncement(row)}
+            title="Delete"
+            style={{ color: 'var(--red)' }}
+          >
+            <TrashIcon />
+          </button>
+        </div>
+      ),
+    },
+  ];
+
+  return (
+    <div>
+      <div
+        className="page-header"
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}
+      >
+        <div>
+          <h1 className="page-title">Announcements</h1>
+          <p className="page-sub">
+            Create targeted announcements for students or professors by department.
+          </p>
+        </div>
+
+        <Button
+          variant="primary"
+          icon={<PlusIcon />}
+          onClick={() => setShowCreate(true)}
+        >
+          New Announcement
+        </Button>
+      </div>
+
+      <div className="card card--no-pad">
+        <Table
+          columns={columns}
+          data={announcements}
+          loading={loading}
+          emptyMessage="No announcements yet"
+        />
+        <div style={{ padding: '0 16px' }}>
+          <Pagination pagination={pagination} onPageChange={setPage} />
+        </div>
+      </div>
+
+      <AnnouncementFormModal
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        onSaved={() => {
+          setShowCreate(false);
+          refetch();
+        }}
+        title="Create Announcement"
+      />
+
+      <AnnouncementFormModal
+        open={!!editAnnouncement}
+        existingAnnouncement={editAnnouncement}
+        onClose={() => setEditAnnouncement(null)}
+        onSaved={() => {
+          setEditAnnouncement(null);
+          refetch();
+        }}
+        title="Edit Announcement"
+      />
+
+      <ConfirmDialog
+        open={!!delAnnouncement}
+        onClose={() => setDelAnnouncement(null)}
+        onConfirm={handleDelete}
+        loading={delLoading}
+        danger
+        title="Delete Announcement"
+        message={`Delete announcement "${delAnnouncement?.title}"?`}
+      />
+    </div>
+  );
+}
+
+function emptyAnnouncementForm() {
+  return {
+    title: '',
+    content: '',
+    target_role: 'all',
+    target_department: 'all',
+    is_pinned: false,
+    publish_mode: 'now',
+    publish_at: '',
+    is_published: true,
+    expires_at: '',
+  };
+}
+
+function toDateInputValue(value) {
+  if (!value) return '';
+  return String(value).slice(0, 10);
+}
+
+function toDateTimeLocalValue(value) {
+  if (!value) return '';
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return String(value).slice(0, 16);
+  }
+
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+
+  return local.toISOString().slice(0, 16);
+}
+
+function getAnnouncementPublishMode(announcement) {
+  if (!announcement?.is_published) return 'draft';
+
+  if (
+    announcement.published_at &&
+    new Date(announcement.published_at).getTime() > Date.now()
+  ) {
+    return 'scheduled';
+  }
+
+  return 'now';
+}
+
+function getAnnouncementStatus(announcement) {
+  if (!announcement?.is_published) return { label: 'Draft', variant: 'gray' };
+
+  if (
+    announcement.published_at &&
+    new Date(announcement.published_at).getTime() > Date.now()
+  ) {
+    return { label: 'Scheduled', variant: 'amber' };
+  }
+
+  return { label: 'Published', variant: 'green' };
+}
+
+function AnnouncementFormModal({
+  open,
+  onClose,
+  onSaved,
+  title,
+  existingAnnouncement,
+}) {
+  const isEdit = Boolean(existingAnnouncement?.id);
+  const [form, setForm] = useState(emptyAnnouncementForm());
+  const [imageFile, setImageFile] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({});
+
+  const { data: departmentsData } = useAsync(
+    () => announcementAPI.getDepartments(),
+    []
+  );
+
+  const departmentOptions = [
+    { value: 'all', label: 'All departments' },
+    ...normalizeDepartmentOptions(departmentsData).map(department => ({
+      value: department,
+      label: department,
+    })),
+  ];
+
+  useEffect(() => {
+    if (!open) return;
+
+    if (existingAnnouncement) {
+      setForm({
+        title: existingAnnouncement.title || '',
+        content: existingAnnouncement.content || '',
+        target_role: existingAnnouncement.target_role || 'all',
+        target_department: existingAnnouncement.target_department || 'all',
+        is_pinned: existingAnnouncement.is_pinned === true,
+        publish_mode: getAnnouncementPublishMode(existingAnnouncement),
+        publish_at: toDateTimeLocalValue(existingAnnouncement.published_at),
+        is_published: existingAnnouncement.is_published !== false,
+        expires_at: toDateInputValue(existingAnnouncement.expires_at),
+      });
+    } else {
+      setForm(emptyAnnouncementForm());
+    }
+
+    setImageFile(null);
+    setErrors({});
+  }, [open, existingAnnouncement]);
+
+  const set = key => event => {
+    const value = event.target.type === 'checkbox'
+      ? event.target.checked
+      : event.target.value;
+
+    setForm(current => ({ ...current, [key]: value }));
+  };
+
+  const validate = () => {
+    const nextErrors = {};
+
+    if (!String(form.title || '').trim()) {
+      nextErrors.title = 'Title is required.';
+    }
+
+    if (!String(form.content || '').trim()) {
+      nextErrors.content = 'Content is required.';
+    }
+
+    if (!['all', 'students', 'professors'].includes(form.target_role)) {
+      nextErrors.target_role = 'Choose a valid recipient type.';
+    }
+
+    if (!String(form.target_department || '').trim()) {
+      nextErrors.target_department = 'Choose a department scope.';
+    }
+
+    if (form.publish_mode === 'scheduled') {
+      if (!form.publish_at) {
+        nextErrors.publish_at = 'Choose when this announcement should spread.';
+      } else if (new Date(form.publish_at).getTime() <= Date.now()) {
+        nextErrors.publish_at = 'Scheduled spread time must be in the future.';
+      }
+    }
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const handleSave = async () => {
+    if (!validate()) return;
+
+    setLoading(true);
+
+    try {
+      const payload = {
+        title: String(form.title || '').trim(),
+        content: String(form.content || '').trim(),
+        target_role: form.target_role || 'all',
+        target_department: form.target_department || 'all',
+        is_pinned: Boolean(form.is_pinned),
+        is_published: form.publish_mode !== 'draft',
+        publish_at: form.publish_mode === 'scheduled' ? form.publish_at : null,
+        expires_at: form.expires_at || null,
+      };
+
+      if (isEdit) {
+        await announcementAPI.update(existingAnnouncement.id, payload, imageFile);
+        toast.success('Announcement updated');
+      } else {
+        await announcementAPI.create(payload, imageFile);
+        toast.success('Announcement created');
+      }
+
+      onSaved();
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={title}
+      size="lg"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+
+          <Button variant="primary" loading={loading} onClick={handleSave}>
+            Save Announcement
+          </Button>
+        </>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <Input
+          label="Title"
+          required
+          value={form.title}
+          onChange={set('title')}
+          error={errors.title}
+          placeholder="Announcement title"
+        />
+
+        <Textarea
+          label="Content"
+          required
+          value={form.content}
+          onChange={set('content')}
+          error={errors.content}
+          placeholder="Write the announcement content…"
+          rows={5}
+        />
+
+        <div className="form-row">
+          <Select
+            label="Recipient"
+            required
+            value={form.target_role}
+            onChange={set('target_role')}
+            options={ANNOUNCEMENT_TARGETS}
+            error={errors.target_role}
+          />
+
+          <Select
+            label="Department Scope"
+            required
+            value={form.target_department}
+            onChange={set('target_department')}
+            options={departmentOptions}
+            error={errors.target_department}
+          />
+        </div>
+
+        <div className="form-row">
+          <Input
+            label="Expires At"
+            type="date"
+            value={form.expires_at}
+            onChange={set('expires_at')}
+          />
+
+          <div className="form-group">
+            <label className="form-label">Image</label>
+            <input
+              type="file"
+              accept="image/*"
+              className="form-input"
+              onChange={event => setImageFile(event.target.files?.[0] || null)}
+            />
+          </div>
+        </div>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+          <input
+            type="checkbox"
+            checked={form.is_pinned}
+            onChange={set('is_pinned')}
+          />
+          Pin this announcement
+        </label>
+
+        <div className="form-row">
+          <Select
+            label="Determine when it will spread"
+            required
+            value={form.publish_mode}
+            onChange={set('publish_mode')}
+            options={[
+              { value: 'now', label: 'Spread immediately' },
+              { value: 'scheduled', label: 'Schedule for later' },
+              { value: 'draft', label: 'Save as draft' },
+            ]}
+          />
+
+          {form.publish_mode === 'scheduled' ? (
+            <Input
+              label="Spread At"
+              type="datetime-local"
+              required
+              value={form.publish_at}
+              onChange={set('publish_at')}
+              error={errors.publish_at}
+            />
+          ) : (
+            <div className="form-group">
+              <label className="form-label">Spread At</label>
+              <div
+                className="form-input"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  color: 'var(--text-muted)',
+                  background: 'var(--bg)',
+                }}
+              >
+                {form.publish_mode === 'draft'
+                  ? 'Not visible until published'
+                  : 'Immediately after saving'}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </Modal>
   );
 }

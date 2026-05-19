@@ -6,6 +6,8 @@ import Navbar  from './components/layout/Navbar';
 import Sidebar from './components/layout/Sidebar';
 import Chatbot from './components/ui/Chatbot';
 import { Spinner } from './components/ui/index';
+import AnnouncementDetailPage from './pages/AnnouncementDetailPage';
+
 
 import { LoginPage, RegisterPage }        from './pages/AuthPages';
 import ForgotPasswordPage                  from './pages/ForgotPassword';
@@ -15,8 +17,12 @@ import SchedulePage                        from './pages/SchedulePage';
 import { SearchPage, NotificationsPage }  from './pages/SearchAndNotifications';
 import { ProfilePage, AnnouncementsPage } from './pages/ProfileAndAnnouncements';
 import {
-  AdminDashboard, AdminUsers, AdminFloors,
-  AdminSchedule, AdminNotifications,
+  AdminDashboard,
+  AdminUsers,
+  AdminFloors,
+  AdminSchedule,
+  AdminNotifications,
+  AdminAnnouncements,
 } from './pages/admin/AdminPages';
 import AdminRoomsPage from './pages/admin/AdminRoomsPage';
 import MapEditorPage from './pages/admin/MapEditorPage';
@@ -83,6 +89,7 @@ export default function App() {
             <Route path="/search"        element={<SearchPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/announcements" element={<AnnouncementsPage />} />
+            <Route path="/announcements/:id" element={<AnnouncementDetailPage />} />
             <Route path="/profile"       element={<ProfilePage />} />
             <Route path="/professor"     element={<ProfessorDashboard />} />
           </Route>
@@ -101,7 +108,7 @@ export default function App() {
   <Route path="/admin/map-editor"    element={<MapEditorPage />} />
   <Route path="/admin/schedule"      element={<AdminSchedule />} />
   <Route path="/admin/notifications" element={<AdminNotifications />} />
-  <Route path="/admin/announcements" element={<AnnouncementsPage />} />
+  <Route path="/admin/announcements" element={<AdminAnnouncements />} />
 </Route>
 
           <Route path="*" element={

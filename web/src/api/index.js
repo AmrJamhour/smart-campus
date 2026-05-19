@@ -131,6 +131,8 @@ export const userAPI = {
 export const announcementAPI = {
   getAll: (params = {}) => api.get('/announcements', { params }),
 
+  getDepartments: () => api.get('/announcements/departments/list'),
+
   getById: (id) => api.get(`/announcements/${id}`),
 
   create: (data, file) => {
