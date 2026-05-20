@@ -105,55 +105,61 @@ function toNumberOrNull(value) {
 function mergeDbRoomWithStaticGeometry(room, floorMeta, staticBlock) {
   const type = normalizeMapType(room.type);
 
+  const sharedFields = {
+    dbId: room.id,
+    fromDatabase: true,
+    id: staticBlock?.id || room.room_number || String(room.id),
+    roomNumber: room.room_number || staticBlock?.roomNumber || '',
+    room_number: room.room_number,
+    name: room.name || staticBlock?.name || '',
+    type,
+    department: room.department || staticBlock?.department || '—',
+    capacity: room.capacity ?? staticBlock?.capacity ?? '—',
+    description: room.description || staticBlock?.description || '',
+    status: room.is_active === false ? 'Inactive' : 'Available',
+    accessible: room.is_accessible === true || staticBlock?.accessible === true,
+    is_active: room.is_active !== false,
+    lecturerNumber: room.lecturer_number || room.lecturerNumber || staticBlock?.lecturerNumber || '—',
+    lecturerName: room.lecturerName || room.lecturer_name || room.name || staticBlock?.lecturerName || '—',
+    lecturerEmail: room.lecturerEmail || room.lecturer_email || room.email || staticBlock?.lecturerEmail || '—',
+    currentCourse: room.currentCourse || staticBlock?.currentCourse || '—',
+    lectureTime: room.lectureTime || staticBlock?.lectureTime || '—',
+    coord_x: Number(room.coord_x) || 0,
+    coord_y: Number(room.coord_y) || 0,
+    features: parseRoomFeatures(room.features),
+  };
+
+  // Use polygon_points from DB if available (admin-drawn shapes, migrated rooms)
+  const polyPts = Array.isArray(room.polygon_points) && room.polygon_points.length >= 3
+    ? room.polygon_points
+    : null;
+
+  if (polyPts) {
+    const pixelPoints = polyPts.map(pt => ({
+      x: (Number(pt.x) / 100) * floorMeta.width,
+      y: (Number(pt.y) / 100) * floorMeta.height,
+    }));
+    const points = pixelPoints.map(pt => `${pt.x},${pt.y}`).join(' ');
+    const labelX = pixelPoints.reduce((s, p) => s + p.x, 0) / pixelPoints.length;
+    const labelY = pixelPoints.reduce((s, p) => s + p.y, 0) / pixelPoints.length;
+    return {
+      ...(staticBlock || {}),
+      ...sharedFields,
+      shape: 'polygon',
+      points,
+      labelX,
+      labelY,
+    };
+  }
+
+  // Fallback: use static block pixel geometry (pre-migration rooms)
   if (!staticBlock?.shape) {
     return null;
   }
 
   return {
     ...staticBlock,
-
-    dbId: room.id,
-    fromDatabase: true,
-
-    id: staticBlock.id,
-    roomNumber: staticBlock.roomNumber || room.room_number,
-    room_number: room.room_number,
-
-    name: room.name || staticBlock.name,
-    type,
-    department: room.department || staticBlock.department || '—',
-    capacity: room.capacity ?? staticBlock.capacity ?? '—',
-    description: room.description || staticBlock.description || '',
-    status: room.is_active === false ? 'Inactive' : 'Available',
-    accessible: room.is_accessible === true || staticBlock.accessible === true,
-    is_active: room.is_active !== false,
-
-    lecturerNumber:
-      room.lecturer_number ||
-      room.lecturerNumber ||
-      staticBlock.lecturerNumber ||
-      '—',
-
-    lecturerName:
-      room.lecturerName ||
-      room.lecturer_name ||
-      room.name ||
-      staticBlock.lecturerName ||
-      '—',
-
-    lecturerEmail:
-      room.lecturerEmail ||
-      room.lecturer_email ||
-      room.email ||
-      staticBlock.lecturerEmail ||
-      '—',
-
-    currentCourse: room.currentCourse || staticBlock.currentCourse || '—',
-    lectureTime: room.lectureTime || staticBlock.lectureTime || '—',
-
-    coord_x: Number(room.coord_x) || 0,
-    coord_y: Number(room.coord_y) || 0,
-    features: parseRoomFeatures(room.features),
+    ...sharedFields,
   };
 }
 

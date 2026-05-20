@@ -374,17 +374,75 @@ export default function MapEditorPage() {
           setSelectedBuilding(floor.building_id);
         }
 
-        setRooms(
-          (data.data.rooms || []).map(room => ({
-            ...room,
-            coord_x: Number(room.coord_x) || 0,
-            coord_y: Number(room.coord_y) || 0,
-            coord_width: Number(room.coord_width) || 6,
-            coord_height: Number(room.coord_height) || 4,
-            features: parseFeatures(room.features),
-          }))
-        );
+        const rawRooms = (data.data.rooms || []).map(room => ({
+          ...room,
+          coord_x: Number(room.coord_x) || 0,
+          coord_y: Number(room.coord_y) || 0,
+          coord_width: Number(room.coord_width) || 6,
+          coord_height: Number(room.coord_height) || 4,
+          features: parseFeatures(room.features),
+        }));
 
+        // Auto-migrate rooms without polygon_points using static geometry
+        const floorKey = getEditorFloorKey(floor);
+        const floorMeta = FLOOR_MAPS?.[floorKey] || null;
+        const floorW = Number(floorMeta?.width) || Number(floor?.map_width) || 1200;
+        const floorH = Number(floorMeta?.height) || Number(floor?.map_height) || 600;
+
+        let finalRooms = rawRooms;
+
+        if (floorMeta?.blocks) {
+          const staticByKey = new Map();
+          floorMeta.blocks.forEach(block => {
+            const key = normalizeRoomSearch(block.roomNumber || block.id);
+            staticByKey.set(key, block);
+          });
+
+          const migrations = rawRooms
+            .filter(room => !Array.isArray(room.polygon_points) || room.polygon_points.length < 3)
+            .flatMap(room => {
+              const staticBlock = getDbRoomCandidateKeys(room)
+                .map(k => staticByKey.get(k))
+                .find(Boolean);
+              if (!staticBlock) return [];
+
+              let polygonPoints;
+              if (staticBlock.shape === 'polygon') {
+                polygonPoints = String(staticBlock.points || '')
+                  .trim()
+                  .split(/\s+/)
+                  .map(pair => {
+                    const [px, py] = pair.split(',').map(Number);
+                    return { x: pixelsToPercentX(px, floorW), y: pixelsToPercentY(py, floorH) };
+                  })
+                  .filter(pt => Number.isFinite(pt.x) && Number.isFinite(pt.y));
+              } else {
+                const { x, y, width, height } = staticBlock;
+                const x1 = pixelsToPercentX(x, floorW);
+                const y1 = pixelsToPercentY(y, floorH);
+                const x2 = pixelsToPercentX(x + (width || 0), floorW);
+                const y2 = pixelsToPercentY(y + (height || 0), floorH);
+                polygonPoints = [{ x: x1, y: y1 }, { x: x2, y: y1 }, { x: x2, y: y2 }, { x: x1, y: y2 }];
+              }
+
+              if (polygonPoints.length < 3) return [];
+              return [{ roomId: room.id, polygonPoints }];
+            });
+
+          if (migrations.length > 0) {
+            migrations.forEach(({ roomId, polygonPoints }) => {
+              roomAPI.update(roomId, { polygon_points: polygonPoints }).catch(() => {});
+            });
+
+            const migrationMap = new Map(migrations.map(m => [m.roomId, m.polygonPoints]));
+            finalRooms = rawRooms.map(room => {
+              const pts = migrationMap.get(room.id);
+              return pts ? { ...room, polygon_points: pts } : room;
+            });
+          }
+        }
+
+        setRooms(finalRooms);
         setAdjacency(data.data.adjacency || []);
         setSelectedRoomId(null);
         setConnecting(null);
@@ -471,104 +529,95 @@ export default function MapEditorPage() {
 
   const editorBlocks = useMemo(() => {
     const dbRoomsByKey = new Map();
-    const matchedRoomIds = new Set();
-
     rooms.forEach(room => {
       getDbRoomCandidateKeys(room).forEach(key => {
         dbRoomsByKey.set(key, room);
       });
     });
 
-    const staticBlocks = (activeFloorMeta?.blocks || []).map(staticBlock => {
-      const staticKey = normalizeRoomSearch(staticBlock.roomNumber || staticBlock.id);
-      const dbRoom = dbRoomsByKey.get(staticKey);
-
-      if (dbRoom?.id) {
-        matchedRoomIds.add(dbRoom.id);
-      }
-
-      return {
+    // Static-only overlays: design blocks with no matching DB room — dim, read-only
+    const staticBlocks = (activeFloorMeta?.blocks || [])
+      .filter(staticBlock => {
+        const staticKey = normalizeRoomSearch(staticBlock.roomNumber || staticBlock.id);
+        return !dbRoomsByKey.get(staticKey);
+      })
+      .map(staticBlock => ({
         ...staticBlock,
-
-        id: dbRoom?.id || `static_${staticBlock.id}`,
-        dbId: dbRoom?.id || null,
-        isStaticOnly: !dbRoom,
+        id: `static_${staticBlock.id}`,
+        dbId: null,
+        isStaticOnly: true,
         isDynamicDbBlock: false,
+        room_number: staticBlock.roomNumber || staticBlock.id,
+        roomNumber: staticBlock.roomNumber || staticBlock.id,
+        name: staticBlock.name || '',
+        type: staticBlock.type || 'other',
+        department: staticBlock.department || '',
+        capacity: staticBlock.capacity ?? '',
+        is_accessible: staticBlock.accessible === true,
+        coord_x: 0,
+        coord_y: 0,
+        coord_width: 0,
+        coord_height: 0,
+        features: {},
+      }));
 
-        room_number: dbRoom?.room_number || staticBlock.roomNumber || staticBlock.id,
-        roomNumber: dbRoom?.room_number || staticBlock.roomNumber || staticBlock.id,
-        name: dbRoom?.name || staticBlock.name || '',
-        type: dbRoom?.type || staticBlock.type || 'other',
-        department: dbRoom?.department || staticBlock.department || '',
-        capacity: dbRoom?.capacity ?? staticBlock.capacity ?? '',
-        is_accessible: dbRoom?.is_accessible === true || staticBlock.accessible === true,
-
-        coord_x: Number(dbRoom?.coord_x) || 0,
-        coord_y: Number(dbRoom?.coord_y) || 0,
-        coord_width: Number(dbRoom?.coord_width) || 0,
-        coord_height: Number(dbRoom?.coord_height) || 0,
-        features: parseFeatures(dbRoom?.features),
+    // All DB rooms as editable polygon/rect blocks
+    const dynamicDbBlocks = rooms.map(room => {
+      const commonProps = {
+        id: room.id,
+        dbId: room.id,
+        isStaticOnly: false,
+        isDynamicDbBlock: true,
+        room_number: room.room_number,
+        roomNumber: room.room_number,
+        name: room.name || '',
+        type: room.type || 'other',
+        department: room.department || '',
+        capacity: room.capacity ?? '',
+        is_accessible: room.is_accessible === true,
+        coord_x: Number(room.coord_x) || 0,
+        coord_y: Number(room.coord_y) || 0,
+        coord_width: Number(room.coord_width) || 6,
+        coord_height: Number(room.coord_height) || 4,
+        features: parseFeatures(room.features),
       };
-    });
 
-    const dynamicDbBlocks = rooms
-      .filter(room => !matchedRoomIds.has(room.id))
-      .map(room => {
-        const commonProps = {
-          id: room.id,
-          dbId: room.id,
-          isStaticOnly: false,
-          isDynamicDbBlock: true,
-          room_number: room.room_number,
-          roomNumber: room.room_number,
-          name: room.name || '',
-          type: room.type || 'other',
-          department: room.department || '',
-          capacity: room.capacity ?? '',
-          is_accessible: room.is_accessible === true,
-          coord_x: Number(room.coord_x) || 0,
-          coord_y: Number(room.coord_y) || 0,
-          coord_width: Number(room.coord_width) || 6,
-          coord_height: Number(room.coord_height) || 4,
-          features: parseFeatures(room.features),
-        };
+      const polyPts = Array.isArray(room.polygon_points) && room.polygon_points.length >= 3
+        ? room.polygon_points
+        : null;
 
-        const polyPts = Array.isArray(room.polygon_points) && room.polygon_points.length >= 3
-          ? room.polygon_points
-          : null;
-
-        if (polyPts) {
-          const pixelPoints = polyPts.map(pt => ({
-            x: percentToPixelsX(pt.x, editorCanvasWidth),
-            y: percentToPixelsY(pt.y, editorCanvasHeight),
-          }));
-          const svgPoints = pixelPoints.map(pt => `${pt.x},${pt.y}`).join(' ');
-          const center = polygonCenter(svgPoints);
-          return {
-            ...commonProps,
-            shape: 'polygon',
-            points: svgPoints,
-            pixelPoints,
-            labelX: center.x,
-            labelY: center.y,
-          };
-        }
-
-        const x = percentToPixelsX(room.coord_x, editorCanvasWidth);
-        const y = percentToPixelsY(room.coord_y, editorCanvasHeight);
-        const width = percentToPixelsX(room.coord_width || 6, editorCanvasWidth);
-        const height = percentToPixelsY(room.coord_height || 4, editorCanvasHeight);
+      if (polyPts) {
+        const pixelPoints = polyPts.map(pt => ({
+          x: percentToPixelsX(pt.x, editorCanvasWidth),
+          y: percentToPixelsY(pt.y, editorCanvasHeight),
+        }));
+        const svgPoints = pixelPoints.map(pt => `${pt.x},${pt.y}`).join(' ');
+        const center = polygonCenter(svgPoints);
         return {
           ...commonProps,
-          shape: 'rect',
-          x,
-          y,
-          width,
-          height,
-          labelX: x + width / 2,
-          labelY: y + height / 2,
+          shape: 'polygon',
+          points: svgPoints,
+          pixelPoints,
+          labelX: center.x,
+          labelY: center.y,
         };
-      });
+      }
+
+      const x = percentToPixelsX(room.coord_x, editorCanvasWidth);
+      const y = percentToPixelsY(room.coord_y, editorCanvasHeight);
+      const width = percentToPixelsX(room.coord_width || 6, editorCanvasWidth);
+      const height = percentToPixelsY(room.coord_height || 4, editorCanvasHeight);
+      return {
+        ...commonProps,
+        shape: 'rect',
+        x,
+        y,
+        width,
+        height,
+        labelX: x + width / 2,
+        labelY: y + height / 2,
+      };
+    });
 
     return [...staticBlocks, ...dynamicDbBlocks];
   }, [rooms, activeFloorMeta, editorCanvasWidth, editorCanvasHeight]);
@@ -1220,6 +1269,7 @@ export default function MapEditorPage() {
                       key={block.id}
                       transform={`translate(${offset.x}, ${offset.y})`}
                       onMouseDown={event => handleDesignBlockMouseDown(event, block)}
+                      opacity={block.isStaticOnly ? 0.3 : 1}
                     >
                       {block.shape === 'polygon' ? (
                         <polygon
