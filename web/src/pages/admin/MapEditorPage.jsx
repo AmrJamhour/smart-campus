@@ -269,6 +269,7 @@ export default function MapEditorPage() {
   const [saving, setSaving] = useState(false);
 
   const [draggingVertexBlockId, setDraggingVertexBlockId] = useState(null);
+  const [draggingVertexIndex, setDraggingVertexIndex] = useState(null);
 
   // Add-room wizard
   const [addWizardStep, setAddWizardStep] = useState(1);
@@ -695,6 +696,7 @@ export default function MapEditorPage() {
     e.stopPropagation();
     if (parseFeatures(block.features).is_locked) return;
     setDraggingVertexBlockId(block.id);
+    setDraggingVertexIndex(vertexIndex);
     const isPolygon = block.shape === 'polygon';
     const rawRoom = roomsRef.current.find(r => r.id === block.dbId);
     vertexDrag.current = {
@@ -845,6 +847,7 @@ export default function MapEditorPage() {
         }
         vertexDrag.current.active = false;
         setDraggingVertexBlockId(null);
+        setDraggingVertexIndex(null);
         return;
       }
 
@@ -1240,12 +1243,12 @@ export default function MapEditorPage() {
                       key={block.id}
                       transform={`translate(${offset.x}, ${offset.y})`}
                       onMouseDown={event => handleDesignBlockMouseDown(event, block)}
+                      style={{ opacity: draggingVertexBlockId === block.id ? 0.3 : 1 }}
                     >
                       {block.shape === 'polygon' ? (
                         <polygon
                           points={block.points}
                           className={getBlockCssClass(block, selected, connectingBlock)}
-                          style={{ opacity: draggingVertexBlockId === block.id ? 0.3 : 1 }}
                           onClick={handleBlockClick}
                           onMouseEnter={() => setHoveredRoomId(block.id)}
                           onMouseLeave={() => setHoveredRoomId(null)}
@@ -1257,7 +1260,6 @@ export default function MapEditorPage() {
                           width={block.width}
                           height={block.height}
                           className={getBlockCssClass(block, selected, connectingBlock)}
-                          style={{ opacity: draggingVertexBlockId === block.id ? 0.3 : 1 }}
                           onClick={handleBlockClick}
                           onMouseEnter={() => setHoveredRoomId(block.id)}
                           onMouseLeave={() => setHoveredRoomId(null)}
@@ -1326,6 +1328,43 @@ export default function MapEditorPage() {
                     </g>
                   );
                 })}
+
+                {/* Precision dot — rendered outside room groups so it stays full opacity while dragging */}
+                {draggingVertexBlockId !== null && draggingVertexIndex !== null && (() => {
+                  const block = editorBlocks.find(b => b.id === draggingVertexBlockId);
+                  if (!block) return null;
+                  const offset = getBlockOffsetPixels(block, editorCanvasWidth, editorCanvasHeight);
+                  let dotX, dotY;
+                  if (block.shape === 'polygon') {
+                    const pt = block.pixelPoints?.[draggingVertexIndex];
+                    if (!pt) return null;
+                    dotX = pt.x + offset.x;
+                    dotY = pt.y + offset.y;
+                  } else {
+                    const corners = [
+                      [block.x, block.y],
+                      [block.x + block.width, block.y],
+                      [block.x + block.width, block.y + block.height],
+                      [block.x, block.y + block.height],
+                    ];
+                    const corner = corners[draggingVertexIndex];
+                    if (!corner) return null;
+                    dotX = corner[0] + offset.x;
+                    dotY = corner[1] + offset.y;
+                  }
+                  return (
+                    <circle
+                      key="precision-dot"
+                      cx={dotX}
+                      cy={dotY}
+                      r={2}
+                      fill="#ffffff"
+                      stroke="#1e293b"
+                      strokeWidth={1.5}
+                      pointerEvents="none"
+                    />
+                  );
+                })()}
               </svg>
             </div>
           )}
