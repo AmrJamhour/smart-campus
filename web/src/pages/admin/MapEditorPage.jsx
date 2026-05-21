@@ -268,6 +268,8 @@ export default function MapEditorPage() {
   const [delLoading, setDelLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  const [draggingVertexBlockId, setDraggingVertexBlockId] = useState(null);
+
   // Add-room wizard
   const [addWizardStep, setAddWizardStep] = useState(1);
   const [addWizardShape, setAddWizardShape] = useState('rect');
@@ -528,39 +530,6 @@ export default function MapEditorPage() {
   }
 
   const editorBlocks = useMemo(() => {
-    const dbRoomsByKey = new Map();
-    rooms.forEach(room => {
-      getDbRoomCandidateKeys(room).forEach(key => {
-        dbRoomsByKey.set(key, room);
-      });
-    });
-
-    // Static-only overlays: design blocks with no matching DB room — dim, read-only
-    const staticBlocks = (activeFloorMeta?.blocks || [])
-      .filter(staticBlock => {
-        const staticKey = normalizeRoomSearch(staticBlock.roomNumber || staticBlock.id);
-        return !dbRoomsByKey.get(staticKey);
-      })
-      .map(staticBlock => ({
-        ...staticBlock,
-        id: `static_${staticBlock.id}`,
-        dbId: null,
-        isStaticOnly: true,
-        isDynamicDbBlock: false,
-        room_number: staticBlock.roomNumber || staticBlock.id,
-        roomNumber: staticBlock.roomNumber || staticBlock.id,
-        name: staticBlock.name || '',
-        type: staticBlock.type || 'other',
-        department: staticBlock.department || '',
-        capacity: staticBlock.capacity ?? '',
-        is_accessible: staticBlock.accessible === true,
-        coord_x: 0,
-        coord_y: 0,
-        coord_width: 0,
-        coord_height: 0,
-        features: {},
-      }));
-
     // All DB rooms as editable polygon/rect blocks
     const dynamicDbBlocks = rooms.map(room => {
       const commonProps = {
@@ -619,7 +588,7 @@ export default function MapEditorPage() {
       };
     });
 
-    return [...staticBlocks, ...dynamicDbBlocks];
+    return dynamicDbBlocks;
   }, [rooms, activeFloorMeta, editorCanvasWidth, editorCanvasHeight]);
 
   const selectedRoom = editorBlocks.find(block => block.id === selectedRoomId);
@@ -725,6 +694,7 @@ export default function MapEditorPage() {
   function handleVertexHandleMouseDown(e, block, vertexIndex) {
     e.stopPropagation();
     if (parseFeatures(block.features).is_locked) return;
+    setDraggingVertexBlockId(block.id);
     const isPolygon = block.shape === 'polygon';
     const rawRoom = roomsRef.current.find(r => r.id === block.dbId);
     vertexDrag.current = {
@@ -874,6 +844,7 @@ export default function MapEditorPage() {
           } catch { toast.error('Could not save shape.'); }
         }
         vertexDrag.current.active = false;
+        setDraggingVertexBlockId(null);
         return;
       }
 
@@ -1269,12 +1240,12 @@ export default function MapEditorPage() {
                       key={block.id}
                       transform={`translate(${offset.x}, ${offset.y})`}
                       onMouseDown={event => handleDesignBlockMouseDown(event, block)}
-                      opacity={block.isStaticOnly ? 0.3 : 1}
                     >
                       {block.shape === 'polygon' ? (
                         <polygon
                           points={block.points}
                           className={getBlockCssClass(block, selected, connectingBlock)}
+                          style={{ opacity: draggingVertexBlockId === block.id ? 0.3 : 1 }}
                           onClick={handleBlockClick}
                           onMouseEnter={() => setHoveredRoomId(block.id)}
                           onMouseLeave={() => setHoveredRoomId(null)}
@@ -1286,6 +1257,7 @@ export default function MapEditorPage() {
                           width={block.width}
                           height={block.height}
                           className={getBlockCssClass(block, selected, connectingBlock)}
+                          style={{ opacity: draggingVertexBlockId === block.id ? 0.3 : 1 }}
                           onClick={handleBlockClick}
                           onMouseEnter={() => setHoveredRoomId(block.id)}
                           onMouseLeave={() => setHoveredRoomId(null)}

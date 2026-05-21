@@ -722,7 +722,7 @@ const mapFloors = useMemo(() => {
       blocks:
         dbRoomsLoaded && hasDbFloor
           ? dbRoomsByFloor[floorKey]
-          : floorMeta.blocks,
+          : [],
     };
   });
 
