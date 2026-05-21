@@ -962,6 +962,15 @@
 
   .map-floor-tabs {
     gap: 6px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+
+  .map-floor-tabs::-webkit-scrollbar {
+    display: none;
   }
 
   .map-floor-btn {
@@ -969,6 +978,7 @@
     height: 34px;
     padding: 0 10px;
     font-size: 12px;
+    flex-shrink: 0;
   }
 
   .map-floor-title {
@@ -994,7 +1004,7 @@
     width: 100%;
     max-width: 100%;
     min-width: 0;
-    order: 1;
+    order: 2;
     position: relative !important;
     top: auto !important;
     height: auto !important;
@@ -1007,7 +1017,7 @@
   .map-canvas-card {
     width: 100%;
     max-width: 100%;
-    order: 2;
+    order: 1;
     overflow: hidden;
     border-radius: 16px;
     padding: 10px;
@@ -1059,5 +1069,132 @@
 
   .room-popup-grid {
     grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .map-page {
+    padding: 6px;
+  }
+
+  .map-floor-bar {
+    padding: 8px;
+    gap: 6px;
+    border-radius: 12px;
+  }
+
+  .map-floor-label {
+    font-size: 12px;
+  }
+
+  .map-floor-btn {
+    min-width: 36px;
+    height: 30px;
+    padding: 0 8px;
+    font-size: 11px;
+    border-radius: 8px;
+  }
+
+  .map-floor-title {
+    font-size: 12px;
+  }
+
+  .map-canvas-card {
+    padding: 8px;
+    border-radius: 14px;
+  }
+
+  .map-canvas-wrap {
+    min-height: 320px;
+  }
+
+  .map-zoom-floating {
+    top: 8px;
+    right: 8px;
+    padding: 6px;
+    gap: 5px;
+  }
+
+  .map-zoom-floating button {
+    height: 28px;
+    min-width: 30px;
+    font-size: 13px;
+  }
+
+  .map-zoom-floating span {
+    font-size: 11px;
+    padding: 0 5px;
+  }
+
+  .room-search-card {
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+  .room-search-head h3 {
+    font-size: 15px;
+  }
+
+  .room-search-form input,
+  .room-search-form button {
+    height: 40px;
+    font-size: 13px;
+  }
+
+  .room-modal-card {
+    max-height: 90vh;
+    border-radius: 18px 18px 14px 14px;
+  }
+
+  .room-popup-header {
+    padding: 16px 52px 14px 16px;
+    min-height: 84px;
+    border-radius: 18px 18px 0 0;
+  }
+
+  .room-popup-header h2 {
+    font-size: 22px;
+  }
+
+  .room-popup-header p {
+    font-size: 12px;
+  }
+
+  .room-popup-close {
+    width: 32px;
+    height: 32px;
+    top: 12px;
+    right: 12px;
+    font-size: 20px;
+  }
+
+  .room-popup-grid {
+    padding: 0 12px 12px;
+    gap: 8px;
+  }
+
+  .room-info-box {
+    padding: 10px 12px;
+  }
+
+  .room-popup-action {
+    margin: 0 12px 12px;
+    width: calc(100% - 24px);
+    padding: 12px;
+    font-size: 14px;
+  }
+
+  .map-legend {
+    gap: 6px;
+  }
+
+  .legend-item {
+    font-size: 11px;
+    gap: 6px;
+  }
+
+  .legend-dot {
+    width: 10px;
+    height: 10px;
   }
 }

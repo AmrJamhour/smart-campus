@@ -262,6 +262,84 @@
   opacity: 0.9;
 }
 
+/* =========================================================
+   Responsive
+   ========================================================= */
+
+@media (max-width: 1100px) {
+  .mec-sidebar {
+    width: 220px;
+  }
+
+  .mec-select {
+    width: 170px;
+  }
+}
+
+@media (max-width: 900px) {
+  .mec-toolbar {
+    gap: 6px;
+    padding: 6px 10px;
+  }
+
+  .mec-select {
+    width: 140px;
+    font-size: 11px;
+  }
+
+  .mec-sidebar {
+    width: 200px;
+  }
+}
+
+@media (max-width: 768px) {
+  .mec {
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
+  }
+
+  .mec-toolbar {
+    gap: 5px;
+    padding: 6px 8px;
+    flex-wrap: wrap;
+  }
+
+  .mec-toolbar__right {
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+
+  .mec-select {
+    width: 130px;
+    font-size: 11px;
+  }
+
+  .mec-main {
+    flex-direction: column;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mec-canvas {
+    min-height: 400px;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mec-sidebar {
+    width: 100%;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    max-height: none;
+    overflow-y: visible;
+  }
+
+  .mec-sidebar__body {
+    padding: 10px 12px;
+  }
+}
+
 /* ── Vertex handles ─────────────────────────────────────── */
 .mec-vertex-handle {
   fill: #ffffff;

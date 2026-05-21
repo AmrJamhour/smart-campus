@@ -418,3 +418,42 @@ table {
     bottom: 14px !important;
   }
 }
+
+/* ---------- Very small phones (≤400px) ---------- */
+
+@media (max-width: 400px) {
+  .main-content {
+    padding: 8px !important;
+    padding-bottom: 80px !important;
+  }
+
+  .main-content--map {
+    padding: 6px !important;
+    padding-bottom: 80px !important;
+  }
+
+  /* Ensure tap targets meet 44×44px minimum */
+  button,
+  .btn,
+  [role="button"] {
+    min-height: 40px;
+  }
+
+  /* Tighten card padding on tiny screens */
+  .card {
+    padding: 12px !important;
+  }
+
+  /* Navbar stays compact */
+  .navbar {
+    height: 58px;
+    padding-inline: 8px;
+  }
+
+  /* Page headers single column always */
+  .page-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px;
+  }
+}
