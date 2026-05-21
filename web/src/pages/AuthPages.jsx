@@ -11,16 +11,15 @@ const DEPARTMENTS = [
   'Mechanical Engineering',
   'Civil Engineering',
   'Industrial Engineering',
-  'Information Technology',
   'Architectural Engineering',
+  'Information Technology',
   'Chemical Engineering',
   'Agricultural Engineering',
   'Energy and Environmental Engineering',
   'Network and Intelligent Systems Engineering',
   'Urban Planning and Technology Engineering',
   'Geomatics Engineering',
-  'Mechanical Engineering Major',
-  'Mechanical Engineering Minor'
+  'Mechatronics Engineering',
 ];
 /* ─── Login ──────────────────────────────────────────────── */
 export function LoginPage() {
