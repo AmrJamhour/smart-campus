@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axiosInstance from '../api/axiosInstance';
 import { useAuth } from '../context/AuthContext';
@@ -169,9 +169,19 @@ export default function ProfessorDashboard() {
     ? 'schedule'
     : location.pathname.includes('/professor/students')
       ? 'students'
-      : location.pathname.includes('/professor/attendance')
-        ? 'attendance'
-        : 'overview';
+      : location.pathname.includes('/professor/materials')
+        ? 'materials'
+        : location.pathname.includes('/professor/messages')
+          ? 'messages'
+          : location.pathname.includes('/professor/office-hours')
+            ? 'officeHours'
+            : location.pathname.includes('/professor/change-history')
+              ? 'changeHistory'
+              : location.pathname.includes('/professor/analytics')
+                ? 'analytics'
+                : location.pathname.includes('/professor/attendance')
+                  ? 'attendance'
+                  : 'overview';
 
   const [data, setData] = useState(null);
   const [scheduleRows, setScheduleRows] = useState([]);
@@ -212,6 +222,58 @@ export default function ProfessorDashboard() {
   });
   const [changeSaving, setChangeSaving] = useState(false);
 
+  const [materials, setMaterials] = useState([]);
+  const [materialSections, setMaterialSections] = useState([]);
+  const [materialSectionId, setMaterialSectionId] = useState('');
+  const [materialsLoading, setMaterialsLoading] = useState(false);
+  const [materialSaving, setMaterialSaving] = useState(false);
+  const [materialFileUploading, setMaterialFileUploading] = useState(false);
+  const materialFileInputRef = useRef(null);
+  const [editingMaterialId, setEditingMaterialId] = useState(null);
+  const [materialForm, setMaterialForm] = useState({
+    title: '',
+    material_type: 'lecture_notes',
+    week_number: '',
+    file_url: '',
+    description: '',
+    is_published: true,
+    notify_students: true
+  });
+
+  const [officeRows, setOfficeRows] = useState([]);
+  const [officeLoading, setOfficeLoading] = useState(false);
+  const [officeSaving, setOfficeSaving] = useState(false);
+  const [editingOfficeId, setEditingOfficeId] = useState(null);
+  const [officeForm, setOfficeForm] = useState({
+    day_of_week: String(new Date().getDay()),
+    start_time: '10:00',
+    end_time: '11:00',
+    office_room: '',
+    note: '',
+    notify_students: false
+  });
+
+  const [officeBookings, setOfficeBookings] = useState([]);
+  const [bookingSavingId, setBookingSavingId] = useState(null);
+
+  const [messages, setMessages] = useState([]);
+  const [messageSections, setMessageSections] = useState([]);
+  const [messageSectionId, setMessageSectionId] = useState('');
+  const [messageLoading, setMessageLoading] = useState(false);
+  const [messageSaving, setMessageSaving] = useState(false);
+  const [messageForm, setMessageForm] = useState({
+    title: '',
+    body: '',
+    is_pinned: false,
+    notify_students: true
+  });
+
+  const [changeHistory, setChangeHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  const [analytics, setAnalytics] = useState({ totals: {}, sections: [] });
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
   const showToast = useCallback((msg, type = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
@@ -245,6 +307,77 @@ export default function ProfessorDashboard() {
     }
   }, [semester, academicYear, showToast]);
 
+  const loadMaterials = useCallback(async () => {
+    setMaterialsLoading(true);
+    try {
+      const r = await axiosInstance.get('/professor/materials');
+      const sections = r.data.data.sections || [];
+      setMaterialSections(sections);
+      setMaterials(r.data.data.materials || []);
+      setMaterialSectionId((prev) => prev || sections[0]?.id || '');
+    } catch {
+      showToast('Failed to load course materials', 'error');
+    } finally {
+      setMaterialsLoading(false);
+    }
+  }, [showToast]);
+
+  const loadOfficeHoursPage = useCallback(async () => {
+    setOfficeLoading(true);
+    try {
+      const [hoursRes, bookingsRes] = await Promise.all([
+        axiosInstance.get('/professor/office-hours'),
+        axiosInstance.get('/professor/office-hour-bookings')
+      ]);
+      setOfficeRows(hoursRes.data.data.office_hours || []);
+      setOfficeBookings(bookingsRes.data.data.bookings || []);
+    } catch {
+      showToast('Failed to load office hours', 'error');
+    } finally {
+      setOfficeLoading(false);
+    }
+  }, [showToast]);
+
+  const loadChangeHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const r = await axiosInstance.get('/professor/meeting-changes');
+      setChangeHistory(r.data.data.changes || []);
+    } catch {
+      showToast('Failed to load change history', 'error');
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [showToast]);
+
+  const loadAnalytics = useCallback(async () => {
+    setAnalyticsLoading(true);
+    try {
+      const r = await axiosInstance.get('/professor/analytics');
+      setAnalytics(r.data.data || { totals: {}, sections: [] });
+    } catch {
+      showToast('Failed to load analytics', 'error');
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, [showToast]);
+
+
+  const loadMessages = useCallback(async () => {
+    setMessageLoading(true);
+    try {
+      const r = await axiosInstance.get('/professor/messages');
+      const sections = r.data.data.sections || [];
+      setMessageSections(sections);
+      setMessages(r.data.data.messages || []);
+      setMessageSectionId((prev) => prev || sections[0]?.id || '');
+    } catch {
+      showToast('Failed to load course messages', 'error');
+    } finally {
+      setMessageLoading(false);
+    }
+  }, [showToast]);
+
   useEffect(() => {
     loadDashboard();
   }, [loadDashboard]);
@@ -252,6 +385,27 @@ export default function ProfessorDashboard() {
   useEffect(() => {
     if (mode === 'schedule') loadSchedule();
   }, [mode, loadSchedule]);
+
+  useEffect(() => {
+    if (mode === 'materials') loadMaterials();
+  }, [mode, loadMaterials]);
+
+  useEffect(() => {
+    if (mode === 'officeHours') loadOfficeHoursPage();
+  }, [mode, loadOfficeHoursPage]);
+
+  useEffect(() => {
+    if (mode === 'changeHistory') loadChangeHistory();
+  }, [mode, loadChangeHistory]);
+
+  useEffect(() => {
+    if (mode === 'analytics') loadAnalytics();
+  }, [mode, loadAnalytics]);
+
+
+  useEffect(() => {
+    if (mode === 'messages') loadMessages();
+  }, [mode, loadMessages]);
 
   const loadSection = useCallback(async (section, targetMode = 'students', options = {}) => {
     if (!section) return;
@@ -358,6 +512,273 @@ export default function ProfessorDashboard() {
       showToast(err?.response?.data?.message || 'Failed to change room/time', 'error');
     } finally {
       setChangeSaving(false);
+    }
+  };
+
+  const selectedMaterialSection = materialSections.find((s) => s.id === materialSectionId);
+
+  const filteredMaterials = useMemo(() => {
+    return materials.filter((m) => !materialSectionId || m.section_id === materialSectionId);
+  }, [materials, materialSectionId]);
+
+  const uploadMaterialFile = async (file) => {
+    if (!file) return;
+
+    setMaterialFileUploading(true);
+    try {
+      const form = new FormData();
+      form.append('material', file);
+
+      const res = await axiosInstance.post('/professor/materials/upload', form, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      const fileUrl = res.data?.data?.file_url;
+      if (!fileUrl) throw new Error('Upload did not return a file URL.');
+
+      setMaterialForm((p) => ({
+        ...p,
+        file_url: fileUrl
+      }));
+
+      showToast(`✅ File selected: ${file.name}`);
+    } catch (err) {
+      showToast(err?.response?.data?.message || 'Failed to upload material file', 'error');
+    } finally {
+      setMaterialFileUploading(false);
+      if (materialFileInputRef.current) {
+        materialFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const openMaterial = async (material) => {
+    if (!material?.id) return;
+
+    try {
+      const r = await axiosInstance.post(`/professor/materials/${material.id}/open`);
+      const fileUrl = r.data?.data?.file_url || material.file_url;
+
+      if (fileUrl) {
+        window.open(fileUrl, '_blank', 'noopener,noreferrer');
+      }
+
+      setMaterials((prev) => prev.map((m) => (
+        m.id === material.id
+          ? { ...m, download_count: Number(m.download_count || 0) + 1 }
+          : m
+      )));
+    } catch (err) {
+      showToast(err?.response?.data?.message || 'Failed to open material', 'error');
+    }
+  };
+
+  const downloadBlob = async (url, filename) => {
+    try {
+      const r = await axiosInstance.get(url, { responseType: 'blob' });
+      const blobUrl = window.URL.createObjectURL(new Blob([r.data]));
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      showToast(err?.response?.data?.message || 'Failed to export file', 'error');
+    }
+  };
+
+  const exportGrades = () => {
+    if (!activeSection?.id) return;
+    downloadBlob(`/professor/sections/${activeSection.id}/export/grades`, `${activeSection.code || 'section'}-grades.csv`);
+  };
+
+  const exportAttendance = () => {
+    if (!activeSection?.id) return;
+    downloadBlob(`/professor/sections/${activeSection.id}/export/attendance`, `${activeSection.code || 'section'}-attendance.csv`);
+  };
+
+  const resetMaterialForm = () => {
+    setEditingMaterialId(null);
+    setMaterialForm({
+      title: '',
+      material_type: 'lecture_notes',
+      week_number: '',
+      file_url: '',
+      description: '',
+      is_published: true,
+      notify_students: true
+    });
+  };
+
+  const saveMaterial = async () => {
+    if (!materialSectionId || !materialForm.title.trim()) {
+      showToast('Select a section and write a material title', 'error');
+      return;
+    }
+
+    setMaterialSaving(true);
+    try {
+      const payload = {
+        section_id: materialSectionId,
+        ...materialForm,
+        week_number: materialForm.week_number ? Number(materialForm.week_number) : null
+      };
+
+      if (editingMaterialId) {
+        await axiosInstance.patch(`/professor/materials/${editingMaterialId}`, payload);
+        showToast('✅ Material updated');
+      } else {
+        await axiosInstance.post('/professor/materials', payload);
+        showToast('✅ Material added');
+      }
+
+      resetMaterialForm();
+      await loadMaterials();
+    } catch (err) {
+      showToast(err?.response?.data?.message || 'Failed to save material', 'error');
+    } finally {
+      setMaterialSaving(false);
+    }
+  };
+
+  const editMaterial = (m) => {
+    setEditingMaterialId(m.id);
+    setMaterialSectionId(m.section_id);
+    setMaterialForm({
+      title: m.title || '',
+      material_type: m.material_type || 'lecture_notes',
+      week_number: m.week_number || '',
+      file_url: m.file_url || '',
+      description: m.description || '',
+      is_published: m.is_published !== false,
+      notify_students: false
+    });
+  };
+
+  const deleteMaterial = async (materialId) => {
+    if (!window.confirm('Delete this material?')) return;
+    try {
+      await axiosInstance.delete(`/professor/materials/${materialId}`);
+      showToast('Material deleted');
+      await loadMaterials();
+    } catch {
+      showToast('Failed to delete material', 'error');
+    }
+  };
+
+  const resetOfficeForm = () => {
+    setEditingOfficeId(null);
+    setOfficeForm({
+      day_of_week: String(new Date().getDay()),
+      start_time: '10:00',
+      end_time: '11:00',
+      office_room: '',
+      note: '',
+      notify_students: false
+    });
+  };
+
+  const saveOfficeHour = async () => {
+    setOfficeSaving(true);
+    try {
+      await axiosInstance.post('/professor/office-hours', {
+        id: editingOfficeId,
+        ...officeForm,
+        day_of_week: Number(officeForm.day_of_week)
+      });
+      showToast(editingOfficeId ? '✅ Office hour updated' : '✅ Office hour added');
+      resetOfficeForm();
+      await loadOfficeHoursPage();
+      await loadSchedule();
+    } catch (err) {
+      showToast(err?.response?.data?.message || 'Failed to save office hour', 'error');
+    } finally {
+      setOfficeSaving(false);
+    }
+  };
+
+  const editOfficeHour = (row) => {
+    setEditingOfficeId(row.id);
+    setOfficeForm({
+      day_of_week: String(row.day_of_week ?? 0),
+      start_time: formatTime24(row.start_time),
+      end_time: formatTime24(row.end_time),
+      office_room: row.office_room || row.location || '',
+      note: row.note || '',
+      notify_students: false
+    });
+  };
+
+  const deleteOfficeHour = async (id) => {
+    if (!window.confirm('Delete this office hour?')) return;
+    try {
+      await axiosInstance.delete(`/professor/office-hours/${id}`);
+      showToast('Office hour deleted');
+      await loadOfficeHoursPage();
+      await loadSchedule();
+    } catch {
+      showToast('Failed to delete office hour', 'error');
+    }
+  };
+
+  const respondBooking = async (bookingId, status) => {
+    setBookingSavingId(bookingId);
+    try {
+      await axiosInstance.patch(`/professor/office-hour-bookings/${bookingId}`, { status });
+      showToast(status === 'accepted' ? '✅ Booking accepted' : 'Booking declined');
+      await loadOfficeHoursPage();
+    } catch (err) {
+      showToast(err?.response?.data?.message || 'Failed to update booking', 'error');
+    } finally {
+      setBookingSavingId(null);
+    }
+  };
+
+  const saveCourseMessage = async () => {
+    if (!messageSectionId || !messageForm.title.trim() || !messageForm.body.trim()) {
+      showToast('Select a section and write the message title/body', 'error');
+      return;
+    }
+
+    setMessageSaving(true);
+    try {
+      await axiosInstance.post('/professor/messages', {
+        section_id: messageSectionId,
+        ...messageForm
+      });
+      showToast('✅ Course message posted');
+      setMessageForm({ title: '', body: '', is_pinned: false, notify_students: true });
+      await loadMessages();
+    } catch (err) {
+      showToast(err?.response?.data?.message || 'Failed to post message', 'error');
+    } finally {
+      setMessageSaving(false);
+    }
+  };
+
+  const deleteCourseMessage = async (messageId) => {
+    if (!window.confirm('Delete this course message?')) return;
+
+    try {
+      await axiosInstance.delete(`/professor/messages/${messageId}`);
+      showToast('Course message deleted');
+      await loadMessages();
+    } catch (err) {
+      showToast(err?.response?.data?.message || 'Failed to delete message', 'error');
+    }
+  };
+
+  const cancelChange = async (id) => {
+    if (!window.confirm('Cancel this temporary schedule change and notify students?')) return;
+    try {
+      await axiosInstance.delete(`/professor/meeting-changes/${id}`);
+      showToast('Change canceled and students notified');
+      await loadChangeHistory();
+      await loadSchedule();
+    } catch (err) {
+      showToast(err?.response?.data?.message || 'Failed to cancel change', 'error');
     }
   };
 
@@ -678,8 +1099,8 @@ export default function ProfessorDashboard() {
               </div>
               <div className="prof-quick-list">
                 <button onClick={() => navigate('/professor/schedule')}>Review weekly table view</button>
-                <button onClick={() => navigate('/professor/attendance')}>Mark today attendance</button>
-                <button onClick={() => navigate('/professor/students')}>Update grades</button>
+                <button onClick={() => navigate('/professor/materials')}>Add course material</button>
+                <button onClick={() => navigate('/professor/analytics')}>Review analytics</button>
               </div>
             </div>
           </section>
@@ -957,9 +1378,12 @@ export default function ProfessorDashboard() {
             <div className="card" style={{ marginTop: 16 }}>
               <div className="prof-card-hdr">
                 <h3>👥 Students & Grades</h3>
-                <button className="btn btn--primary btn--sm" onClick={saveAllGrades} disabled={savingGrades}>
-                  {savingGrades ? 'Saving...' : '💾 Save All Grades'}
-                </button>
+                <div className="prof-header-actions">
+                  <button className="btn btn--secondary btn--sm" onClick={exportGrades}>⬇ Export grades</button>
+                  <button className="btn btn--primary btn--sm" onClick={saveAllGrades} disabled={savingGrades}>
+                    {savingGrades ? 'Saving...' : '💾 Save All Grades'}
+                  </button>
+                </div>
               </div>
 
               <div className="table-wrap">
@@ -1070,6 +1494,363 @@ export default function ProfessorDashboard() {
         </div>
       )}
 
+
+      {mode === 'materials' && (
+        <div className="prof-feature-page">
+          <div className="prof-feature-grid">
+            <div className="card prof-feature-form-card">
+              <div className="prof-card-hdr">
+                <h3>📚 Course Materials</h3>
+                <span className="prof-muted">Dynamic from your sections and database</span>
+              </div>
+
+              <label className="prof-field">
+                <span>Section</span>
+                <select value={materialSectionId} onChange={(e) => setMaterialSectionId(e.target.value)}>
+                  {materialSections.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.code} — {s.course_name} §{s.section_number}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="prof-material-section-card">
+                <strong>{selectedMaterialSection?.code || 'No section selected'}</strong>
+                <p>{selectedMaterialSection?.course_name || 'Choose a section to add materials.'}</p>
+                {selectedMaterialSection && (
+                  <small>§{selectedMaterialSection.section_number} · {selectedMaterialSection.enrolled || 0} students · {selectedMaterialSection.materials_count || 0} materials</small>
+                )}
+              </div>
+
+              <label className="prof-field">
+                <span>Material title</span>
+                <input value={materialForm.title} onChange={(e) => setMaterialForm((p) => ({ ...p, title: e.target.value }))} placeholder="Example: Week 3 slides" />
+              </label>
+
+              <div className="prof-form-row">
+                <label className="prof-field">
+                  <span>Type</span>
+                  <select value={materialForm.material_type} onChange={(e) => setMaterialForm((p) => ({ ...p, material_type: e.target.value }))}>
+                    <option value="lecture_notes">Lecture notes</option>
+                    <option value="slides">Slides</option>
+                    <option value="assignment">Assignment</option>
+                    <option value="lab_sheet">Lab sheet</option>
+                    <option value="recording">Recording</option>
+                    <option value="reference">Reference</option>
+                    <option value="exam_review">Exam review</option>
+                  </select>
+                </label>
+                <label className="prof-field">
+                  <span>Week</span>
+                  <input type="number" min="1" max="16" value={materialForm.week_number} onChange={(e) => setMaterialForm((p) => ({ ...p, week_number: e.target.value }))} placeholder="1-16" />
+                </label>
+              </div>
+
+              <label className="prof-field">
+                <span>Material file</span>
+
+                <input
+                  ref={materialFileInputRef}
+                  type="file"
+                  className="prof-hidden-file"
+                  accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.zip,.rar,.png,.jpg,.jpeg,.webp,.mp4,.mov"
+                  onChange={(e) => uploadMaterialFile(e.target.files?.[0])}
+                />
+
+                <div className="prof-file-picker">
+                  <button
+                    type="button"
+                    className="prof-file-picker__btn"
+                    onClick={() => materialFileInputRef.current?.click()}
+                    disabled={materialFileUploading}
+                  >
+                    {materialFileUploading ? 'Uploading...' : 'Choose file'}
+                  </button>
+
+                  <div className="prof-file-picker__info">
+                    <strong>{materialForm.file_url ? 'Selected material' : 'No file selected'}</strong>
+                    <small>{materialForm.file_url || 'PDF, Word, PowerPoint, image, video, or archive'}</small>
+                  </div>
+
+                  {materialForm.file_url && (
+                    <button
+                      type="button"
+                      className="prof-file-picker__clear"
+                      onClick={() => setMaterialForm((p) => ({ ...p, file_url: '' }))}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                <input
+                  className="prof-file-link-input"
+                  value={materialForm.file_url}
+                  onChange={(e) => setMaterialForm((p) => ({ ...p, file_url: e.target.value }))}
+                  placeholder="Or paste an external link manually"
+                />
+              </label>
+
+              <label className="prof-field">
+                <span>Description</span>
+                <textarea rows="4" value={materialForm.description} onChange={(e) => setMaterialForm((p) => ({ ...p, description: e.target.value }))} placeholder="Short note for students" />
+              </label>
+
+              <div className="prof-check-row">
+                <label><input type="checkbox" checked={materialForm.is_published} onChange={(e) => setMaterialForm((p) => ({ ...p, is_published: e.target.checked }))} /> Published</label>
+                <label><input type="checkbox" checked={materialForm.notify_students} onChange={(e) => setMaterialForm((p) => ({ ...p, notify_students: e.target.checked }))} /> Notify enrolled students</label>
+              </div>
+
+              <div className="prof-form-actions">
+                {editingMaterialId && <button className="btn btn--secondary" onClick={resetMaterialForm}>Cancel edit</button>}
+                <button className="btn btn--primary" onClick={saveMaterial} disabled={materialSaving || !materialSectionId}>{materialSaving ? 'Saving...' : editingMaterialId ? 'Update material' : 'Add material'}</button>
+              </div>
+            </div>
+
+            <div className="card prof-feature-list-card">
+              <div className="prof-card-hdr">
+                <h3>📄 Materials list</h3>
+                <button className="btn btn--sm btn--secondary" onClick={loadMaterials}>Refresh</button>
+              </div>
+
+              {materialsLoading ? <div className="spinner" /> : (
+                <div className="prof-material-list">
+                  {filteredMaterials.map((m) => (
+                    <div className="prof-material-item" key={m.id}>
+                      <div>
+                        <div className="prof-material-topline">
+                          <span className="badge badge--blue">{m.material_type}</span>
+                          {m.week_number && <span className="badge badge--amber">Week {m.week_number}</span>}
+                          {!m.is_published && <span className="badge">Draft</span>}
+                        </div>
+                        <strong>{m.title}</strong>
+                        <p>{m.description || 'No description'}</p>
+                        <small>
+                          {m.course_code} §{m.section_number} · Opened {Number(m.download_count || 0)} times
+                          {m.file_url ? ' · File available' : ' · No file selected'}
+                        </small>
+                      </div>
+                      <div className="prof-material-actions">
+                        <button className="btn btn--sm btn--secondary" onClick={() => openMaterial(m)} disabled={!m.file_url}>Open</button>
+                        <button className="btn btn--sm btn--secondary" onClick={() => editMaterial(m)}>Edit</button>
+                        <button className="btn btn--sm prof-danger-btn" onClick={() => deleteMaterial(m.id)}>Delete</button>
+                      </div>
+                    </div>
+                  ))}
+                  {filteredMaterials.length === 0 && <div className="empty-state"><p className="empty-state__title">No materials for this section yet.</p></div>}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mode === 'officeHours' && (
+        <div className="prof-feature-page">
+          <div className="prof-feature-grid prof-feature-grid--office">
+            <div className="card prof-feature-form-card">
+              <div className="prof-card-hdr"><h3>🕓 Office Hours</h3><span className="prof-muted">Shown to your students</span></div>
+
+              <label className="prof-field">
+                <span>Day</span>
+                <select value={officeForm.day_of_week} onChange={(e) => setOfficeForm((p) => ({ ...p, day_of_week: e.target.value }))}>
+                  {DAYS_AR.map((d, idx) => <option key={d} value={idx}>{d}</option>)}
+                </select>
+              </label>
+
+              <div className="prof-form-row">
+                <label className="prof-field"><span>Start</span><input type="time" value={officeForm.start_time} onChange={(e) => setOfficeForm((p) => ({ ...p, start_time: e.target.value }))} /></label>
+                <label className="prof-field"><span>End</span><input type="time" value={officeForm.end_time} onChange={(e) => setOfficeForm((p) => ({ ...p, end_time: e.target.value }))} /></label>
+              </div>
+
+              <label className="prof-field"><span>Location / room</span><input value={officeForm.office_room} onChange={(e) => setOfficeForm((p) => ({ ...p, office_room: e.target.value }))} placeholder="Office number or Online" /></label>
+              <label className="prof-field"><span>Note</span><textarea rows="3" value={officeForm.note} onChange={(e) => setOfficeForm((p) => ({ ...p, note: e.target.value }))} placeholder="Example: by appointment" /></label>
+              <div className="prof-check-row"><label><input type="checkbox" checked={officeForm.notify_students} onChange={(e) => setOfficeForm((p) => ({ ...p, notify_students: e.target.checked }))} /> Notify my students</label></div>
+              <div className="prof-form-actions">
+                {editingOfficeId && <button className="btn btn--secondary" onClick={resetOfficeForm}>Cancel edit</button>}
+                <button className="btn btn--primary" onClick={saveOfficeHour} disabled={officeSaving}>{officeSaving ? 'Saving...' : editingOfficeId ? 'Update office hour' : 'Add office hour'}</button>
+              </div>
+            </div>
+
+            <div className="card prof-feature-list-card">
+              <div className="prof-card-hdr"><h3>Weekly office hours</h3><button className="btn btn--sm btn--secondary" onClick={loadOfficeHoursPage}>Refresh</button></div>
+              {officeLoading ? <div className="spinner" /> : (
+                <div className="prof-office-list">
+                  {officeRows.map((oh) => (
+                    <div className="prof-office-item" key={oh.id}>
+                      <div className="prof-office-day">{DAYS_AR[oh.day_of_week] || oh.day_of_week}</div>
+                      <div className="prof-office-info"><strong>{formatTime(oh.start_time)} - {formatTime(oh.end_time)}</strong><span>{oh.office_room || 'Office / Online not specified'}</span>{oh.note && <small>{oh.note}</small>}</div>
+                      <div className="prof-office-actions"><button className="btn btn--sm btn--secondary" onClick={() => editOfficeHour(oh)}>Edit</button><button className="btn btn--sm prof-danger-btn" onClick={() => deleteOfficeHour(oh.id)}>Delete</button></div>
+                    </div>
+                  ))}
+                  {officeRows.length === 0 && <div className="empty-state"><p className="empty-state__title">No office hours added yet.</p></div>}
+                </div>
+              )}
+            <div className="card prof-feature-list-card prof-wide-card">
+              <div className="prof-card-hdr">
+                <h3>📌 Office hour booking requests</h3>
+                <span className="prof-muted">Student appointment requests</span>
+              </div>
+
+              <div className="prof-booking-list">
+                {officeBookings.map((b) => (
+                  <div className="prof-booking-item" key={b.id}>
+                    <div>
+                      <strong>{b.student_name}</strong>
+                      <small>{b.student_number || b.student_email} · {DAYS_AR[b.day_of_week] || b.day_of_week} · {formatTime(b.start_time)} - {formatTime(b.end_time)}</small>
+                      {b.message && <p>{b.message}</p>}
+                    </div>
+                    <div className="prof-booking-actions">
+                      <span className={`badge ${b.status === 'accepted' ? 'badge--green' : b.status === 'declined' ? 'badge--red' : 'badge--amber'}`}>{b.status}</span>
+                      {b.status === 'pending' && (
+                        <>
+                          <button className="btn btn--sm btn--secondary" disabled={bookingSavingId === b.id} onClick={() => respondBooking(b.id, 'accepted')}>Accept</button>
+                          <button className="btn btn--sm prof-danger-btn" disabled={bookingSavingId === b.id} onClick={() => respondBooking(b.id, 'declined')}>Decline</button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {officeBookings.length === 0 && <div className="empty-state"><p className="empty-state__title">No booking requests yet.</p></div>}
+              </div>
+            </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mode === 'messages' && (
+        <div className="prof-feature-page">
+          <div className="prof-feature-grid prof-feature-grid--materials">
+            <div className="card prof-feature-form-card">
+              <div className="prof-card-hdr">
+                <h3>💬 Course Message Board</h3>
+                <span className="prof-muted">Post notes to one section</span>
+              </div>
+
+              <label className="prof-field">
+                <span>Section</span>
+                <select value={messageSectionId} onChange={(e) => setMessageSectionId(e.target.value)}>
+                  {messageSections.map((s) => (
+                    <option key={s.id} value={s.id}>{s.code} §{s.section_number} — {s.course_name}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="prof-field">
+                <span>Title</span>
+                <input value={messageForm.title} onChange={(e) => setMessageForm((p) => ({ ...p, title: e.target.value }))} placeholder="Example: Quiz postponed" />
+              </label>
+
+              <label className="prof-field">
+                <span>Message</span>
+                <textarea rows="5" value={messageForm.body} onChange={(e) => setMessageForm((p) => ({ ...p, body: e.target.value }))} placeholder="Write the message for students" />
+              </label>
+
+              <div className="prof-check-row">
+                <label><input type="checkbox" checked={messageForm.is_pinned} onChange={(e) => setMessageForm((p) => ({ ...p, is_pinned: e.target.checked }))} /> Pin message</label>
+                <label><input type="checkbox" checked={messageForm.notify_students} onChange={(e) => setMessageForm((p) => ({ ...p, notify_students: e.target.checked }))} /> Notify enrolled students</label>
+              </div>
+
+              <div className="prof-form-actions">
+                <button className="btn btn--primary" onClick={saveCourseMessage} disabled={messageSaving || !messageSectionId}>{messageSaving ? 'Posting...' : 'Post message'}</button>
+              </div>
+            </div>
+
+            <div className="card prof-feature-list-card">
+              <div className="prof-card-hdr"><h3>Messages</h3><button className="btn btn--sm btn--secondary" onClick={loadMessages}>Refresh</button></div>
+              {messageLoading ? <div className="spinner" /> : (
+                <div className="prof-message-list">
+                  {messages.map((m) => (
+                    <div className="prof-message-item" key={m.id}>
+                      <div>
+                        <div className="prof-material-topline">
+                          <span className="badge badge--blue">{m.course_code} §{m.section_number}</span>
+                          {m.is_pinned && <span className="badge badge--amber">Pinned</span>}
+                        </div>
+                        <strong>{m.title}</strong>
+                        <p>{m.body}</p>
+                        <small>{new Date(m.created_at).toLocaleString()}</small>
+                      </div>
+                      <button className="btn btn--sm prof-danger-btn" onClick={() => deleteCourseMessage(m.id)}>Delete</button>
+                    </div>
+                  ))}
+                  {messages.length === 0 && <div className="empty-state"><p className="empty-state__title">No course messages yet.</p></div>}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mode === 'changeHistory' && (
+        <div className="card prof-history-page">
+          <div className="prof-card-hdr"><h3>🧾 Room / Time Change History</h3><button className="btn btn--sm btn--secondary" onClick={loadChangeHistory}>Refresh</button></div>
+          {historyLoading ? <div className="spinner" /> : (
+            <div className="table-wrap">
+              <table className="table">
+                <thead><tr><th>Course</th><th>Scope</th><th>Date</th><th>Old</th><th>New</th><th>Reason</th><th>Status</th><th>Action</th></tr></thead>
+                <tbody>
+                  {changeHistory.map((ch) => (
+                    <tr key={ch.id}>
+                      <td><strong>{ch.code}</strong><div style={{fontSize:11,color:'var(--text-muted)'}}>{ch.course_name} §{ch.section_number}</div></td>
+                      <td><span className="badge badge--blue">{scopeLabel(ch.change_scope)}</span></td>
+                      <td>{changeDateText(ch)}</td>
+                      <td>{DAYS_AR[ch.old_day_of_week] || '—'} · {formatTime24(ch.old_start_time)}-{formatTime24(ch.old_end_time)} · {roomDisplay(ch.old_room_number)}</td>
+                      <td>{DAYS_AR[ch.new_day_of_week] || '—'} · {formatTime24(ch.new_start_time)}-{formatTime24(ch.new_end_time)} · {roomDisplay(ch.new_room_number)}</td>
+                      <td>{ch.reason || '—'}</td>
+                      <td><span className={`badge ${ch.is_active ? 'badge--green' : ''}`}>{ch.is_active ? 'Active' : 'Canceled'}</span></td>
+                      <td>{ch.is_active && ch.change_scope !== 'permanent' ? <button className="btn btn--sm prof-danger-btn" onClick={() => cancelChange(ch.id)}>Cancel</button> : <span style={{color:'var(--text-muted)'}}>—</span>}</td>
+                    </tr>
+                  ))}
+                  {changeHistory.length === 0 && <tr><td colSpan={8} style={{textAlign:'center',padding:24,color:'var(--text-muted)'}}>No schedule changes yet.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {mode === 'analytics' && (
+        <div className="prof-analytics-page">
+          <section className="prof-insight-grid">
+            <div className="prof-insight-card"><span>Sections</span><strong>{analytics.totals?.total_sections || 0}</strong><small>active sections</small></div>
+            <div className="prof-insight-card"><span>Students</span><strong>{analytics.totals?.total_students || 0}</strong><small>enrolled students</small></div>
+            <div className="prof-insight-card"><span>Courses</span><strong>{analytics.totals?.total_courses || 0}</strong><small>different courses</small></div>
+            <div className="prof-insight-card prof-insight-card--danger"><span>Warnings</span><strong>{analytics.totals?.warnings_sent || 0}</strong><small>sent warnings</small></div>
+          </section>
+
+          <div className="card">
+            <div className="prof-card-hdr"><h3>📊 Attendance Analytics & Grade Summary</h3><button className="btn btn--sm btn--secondary" onClick={loadAnalytics}>Refresh</button></div>
+            {analyticsLoading ? <div className="spinner" /> : (
+              <div className="table-wrap">
+                <table className="table">
+                  <thead><tr><th>Section</th><th>Students</th><th>Avg Attendance</th><th>Below 75%</th><th>Avg Grade</th><th>High</th><th>Low</th><th>Missing Grades</th><th>Failing</th></tr></thead>
+                  <tbody>
+                    {(analytics.sections || []).map((s) => (
+                      <tr key={s.section_id}>
+                        <td><strong>{s.code}</strong><div style={{fontSize:11,color:'var(--text-muted)'}}>{s.course_name} §{s.section_number}</div></td>
+                        <td>{s.enrolled || 0}</td>
+                        <td><AttBadge pct={s.average_attendance} /></td>
+                        <td><span className={Number(s.below_75_count) > 0 ? 'badge badge--red' : 'badge badge--green'}>{s.below_75_count || 0}</span></td>
+                        <td>{s.average_grade ?? '—'}</td>
+                        <td>{s.highest_grade ?? '—'}</td>
+                        <td>{s.lowest_grade ?? '—'}</td>
+                        <td>{s.missing_grades || 0}</td>
+                        <td><span className={Number(s.failing_count) > 0 ? 'badge badge--red' : ''}>{s.failing_count || 0}</span></td>
+                      </tr>
+                    ))}
+                    {(!analytics.sections || analytics.sections.length === 0) && <tr><td colSpan={9} style={{textAlign:'center',padding:24,color:'var(--text-muted)'}}>No analytics yet.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {mode === 'attendance' && !activeSection && (
         <SectionSelectCard
           sections={data?.sections || []}
@@ -1098,7 +1879,8 @@ export default function ProfessorDashboard() {
               <div className="card">
                 <div className="prof-card-hdr">
                   <h3>✅ Mark Attendance</h3>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button className="btn btn--secondary btn--sm" onClick={exportAttendance}>⬇ Export attendance</button>
                     <input
                       type="date"
                       className="form-input"

@@ -91,10 +91,15 @@ export default function App() {
             <Route path="/announcements" element={<AnnouncementsPage />} />
             <Route path="/announcements/:id" element={<AnnouncementDetailPage />} />
             <Route path="/profile"       element={<ProfilePage />} />
-            <Route path="/professor"            element={<ProfessorDashboard />} />
-            <Route path="/professor/schedule"   element={<ProfessorDashboard />} />
-            <Route path="/professor/students"   element={<ProfessorDashboard />} />
-            <Route path="/professor/attendance" element={<ProfessorDashboard />} />
+            <Route path="/professor"                    element={<ProfessorDashboard />} />
+            <Route path="/professor/schedule"           element={<ProfessorDashboard />} />
+            <Route path="/professor/students"           element={<ProfessorDashboard />} />
+            <Route path="/professor/materials"          element={<ProfessorDashboard />} />
+            <Route path="/professor/messages"           element={<ProfessorDashboard />} />
+            <Route path="/professor/office-hours"       element={<ProfessorDashboard />} />
+            <Route path="/professor/change-history"     element={<ProfessorDashboard />} />
+            <Route path="/professor/analytics"          element={<ProfessorDashboard />} />
+            <Route path="/professor/attendance"         element={<ProfessorDashboard />} />
           </Route>
 
           {/* Map */}

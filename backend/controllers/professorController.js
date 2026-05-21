@@ -16,6 +16,20 @@ function letterGrade(total) {
   return 'E';
 }
 
+
+function csvCell(value) {
+  if (value === null || value === undefined) return '';
+  const text = String(value).replace(/"/g, '""');
+  return /[",\n\r]/.test(text) ? `"${text}"` : text;
+}
+
+function sendCsv(res, filename, rows) {
+  const body = rows.map((row) => row.map(csvCell).join(',')).join('\n');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send(`\ufeff${body}`);
+}
+
 async function getInstructorIdByUserEmail(req) {
   const result = await query(
     `SELECT id FROM instructors WHERE LOWER(email) = LOWER($1) LIMIT 1`,
@@ -37,6 +51,79 @@ async function requireInstructor(req, res) {
   }
 
   return instructorId;
+}
+
+
+
+async function notifySectionStudents({ sectionId, senderId, title, body, data = {}, type = 'custom', relatedRoomId = null }) {
+  const notificationRes = await query(
+    `
+    INSERT INTO notifications (
+      title,
+      body,
+      type,
+      sender_id,
+      target_role,
+      related_room_id,
+      data,
+      is_published,
+      published_at
+    )
+    VALUES ($1, $2, $3::notification_type, $4, 'student', $5, $6::jsonb, TRUE, NOW())
+    RETURNING id
+    `,
+    [title, body, type, senderId, relatedRoomId, JSON.stringify(data || {})]
+  );
+
+  await query(
+    `
+    INSERT INTO notification_receipts (notification_id, user_id)
+    SELECT $1, e.student_id
+    FROM enrollments e
+    WHERE e.section_id = $2
+      AND e.status = 'enrolled'
+    ON CONFLICT (notification_id, user_id) DO NOTHING
+    `,
+    [notificationRes.rows[0].id, sectionId]
+  );
+
+  return notificationRes.rows[0].id;
+}
+
+async function notifyAllProfessorStudents({ instructorId, senderId, title, body, data = {}, type = 'custom' }) {
+  const notificationRes = await query(
+    `
+    INSERT INTO notifications (
+      title,
+      body,
+      type,
+      sender_id,
+      target_role,
+      data,
+      is_published,
+      published_at
+    )
+    VALUES ($1, $2, $3::notification_type, $4, 'student', $5::jsonb, TRUE, NOW())
+    RETURNING id
+    `,
+    [title, body, type, senderId, JSON.stringify(data || {})]
+  );
+
+  await query(
+    `
+    INSERT INTO notification_receipts (notification_id, user_id)
+    SELECT DISTINCT $1, e.student_id
+    FROM enrollments e
+    JOIN sections s ON s.id = e.section_id
+    WHERE s.instructor_id = $2
+      AND s.is_active = TRUE
+      AND e.status = 'enrolled'
+    ON CONFLICT (notification_id, user_id) DO NOTHING
+    `,
+    [notificationRes.rows[0].id, instructorId]
+  );
+
+  return notificationRes.rows[0].id;
 }
 
 async function getDashboard(req, res, next) {
@@ -1197,6 +1284,1121 @@ async function changeMeeting(req, res, next) {
   }
 }
 
+
+
+async function uploadMaterialFile(req, res, next) {
+  try {
+    const instructorId = await requireInstructor(req, res);
+    if (!instructorId) return;
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No material file was uploaded.'
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      data: {
+        file_url: `/uploads/materials/${req.file.filename}`,
+        original_name: req.file.originalname,
+        mime_type: req.file.mimetype,
+        size_bytes: req.file.size
+      }
+    });
+  } catch (e) {
+    next(e);
+  }
+}
+
+
+async function getMaterials(req, res, next) {
+  try {
+    const instructorId = await requireInstructor(req, res);
+    if (!instructorId) return;
+
+    const sectionsRes = await query(
+      `
+      SELECT
+        s.id,
+        s.section_number,
+        s.semester::TEXT AS semester,
+        s.academic_year,
+        c.id AS course_id,
+        c.code,
+        c.name AS course_name,
+        COALESCE(c.name_ar, c.name) AS course_name_ar,
+        COALESCE(c.credit_hours, 3) AS credit_hours,
+        r.room_number,
+        (
+          SELECT COUNT(*)
+          FROM enrollments e
+          WHERE e.section_id = s.id
+            AND e.status = 'enrolled'
+        ) AS enrolled,
+        (
+          SELECT COUNT(*)
+          FROM professor_course_materials pcm
+          WHERE pcm.section_id = s.id
+        ) AS materials_count
+      FROM sections s
+      JOIN courses c ON c.id = s.course_id
+      LEFT JOIN rooms r ON r.id = s.room_id
+      WHERE s.instructor_id = $1
+        AND s.is_active = TRUE
+      ORDER BY c.code, s.section_number
+      `,
+      [instructorId]
+    );
+
+    const materialsRes = await query(
+      `
+      SELECT
+        pcm.id,
+        pcm.section_id,
+        pcm.course_id,
+        pcm.room_id,
+        pcm.title,
+        pcm.material_type,
+        pcm.description,
+        pcm.file_url,
+        pcm.week_number,
+        pcm.day_of_week,
+        pcm.start_time,
+        pcm.end_time,
+        pcm.room_number,
+        pcm.room_name,
+        pcm.semester,
+        pcm.academic_year,
+        pcm.is_published,
+        pcm.uploaded_at,
+        pcm.updated_at,
+        COALESCE(pcm.download_count, 0) AS download_count,
+        c.code AS course_code,
+        c.name AS course_name,
+        COALESCE(c.name_ar, c.name) AS course_name_ar,
+        s.section_number,
+        (
+          SELECT COUNT(*)
+          FROM enrollments e
+          WHERE e.section_id = s.id
+            AND e.status = 'enrolled'
+        ) AS enrolled
+      FROM professor_course_materials pcm
+      JOIN sections s ON s.id = pcm.section_id
+      JOIN courses c ON c.id = pcm.course_id
+      WHERE pcm.instructor_id = $1
+      ORDER BY c.code, s.section_number, pcm.week_number NULLS LAST, pcm.uploaded_at DESC
+      `,
+      [instructorId]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        sections: sectionsRes.rows,
+        materials: materialsRes.rows
+      }
+    });
+  } catch (e) {
+    next(e);
+  }
+}
+
+async function recordMaterialOpen(req, res, next) {
+  try {
+    const instructorId = await requireInstructor(req, res);
+    if (!instructorId) return;
+
+    const { materialId } = req.params;
+
+    const materialRes = await query(
+      `
+      SELECT id, file_url
+      FROM professor_course_materials
+      WHERE id = $1
+        AND instructor_id = $2
+      `,
+      [materialId, instructorId]
+    );
+
+    if (!materialRes.rows.length) {
+      return res.status(404).json({ success: false, message: 'Material not found.' });
+    }
+
+    await query(
+      `
+      INSERT INTO professor_material_access_logs (material_id, user_id, accessed_at)
+      VALUES ($1, $2, NOW())
+      `,
+      [materialId, req.user.id]
+    );
+
+    const updateRes = await query(
+      `
+      UPDATE professor_course_materials
+      SET download_count = COALESCE(download_count, 0) + 1
+      WHERE id = $1
+      RETURNING download_count
+      `,
+      [materialId]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        file_url: materialRes.rows[0].file_url,
+        download_count: updateRes.rows[0]?.download_count || 0
+      }
+    });
+  } catch (e) {
+    next(e);
+  }
+}
+
+async function createMaterial(req, res, next) {
+  try {
+    const instructorId = await requireInstructor(req, res);
+    if (!instructorId) return;
+
+    const {
+      section_id,
+      title,
+      material_type = 'lecture_notes',
+      description,
+      file_url,
+      week_number,
+      is_published = true,
+      notify_students = false
+    } = req.body;
+
+    if (!section_id || !title) {
+      return res.status(400).json({ success: false, message: 'Section and title are required.' });
+    }
+
+    const sectionRes = await query(
+      `
+      SELECT
+        s.id,
+        s.course_id,
+        s.room_id,
+        s.semester::TEXT AS semester,
+        s.academic_year,
+        COALESCE(sm.day_of_week, s.day_of_week[1]) AS day_of_week,
+        COALESCE(sm.start_time, s.start_time) AS start_time,
+        COALESCE(sm.end_time, s.end_time) AS end_time,
+        c.code,
+        c.name AS course_name,
+        COALESCE(c.name_ar, c.name) AS course_name_ar,
+        s.section_number,
+        r.room_number,
+        r.name AS room_name
+      FROM sections s
+      JOIN courses c ON c.id = s.course_id
+      LEFT JOIN section_meetings sm ON sm.section_id = s.id
+      LEFT JOIN rooms r ON r.id = COALESCE(sm.room_id, s.room_id)
+      WHERE s.id = $1
+        AND s.instructor_id = $2
+        AND s.is_active = TRUE
+      ORDER BY COALESCE(sm.day_of_week, s.day_of_week[1]), COALESCE(sm.start_time, s.start_time)
+      LIMIT 1
+      `,
+      [section_id, instructorId]
+    );
+
+    if (!sectionRes.rows.length) {
+      return res.status(403).json({ success: false, message: 'Not your active section.' });
+    }
+
+    const sec = sectionRes.rows[0];
+
+    const insertRes = await query(
+      `
+      INSERT INTO professor_course_materials (
+        instructor_id,
+        section_id,
+        course_id,
+        room_id,
+        title,
+        material_type,
+        description,
+        file_url,
+        week_number,
+        day_of_week,
+        start_time,
+        end_time,
+        room_number,
+        room_name,
+        semester,
+        academic_year,
+        is_published
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+      RETURNING *
+      `,
+      [
+        instructorId,
+        section_id,
+        sec.course_id,
+        sec.room_id,
+        title,
+        material_type,
+        description || null,
+        file_url || null,
+        week_number ? Number(week_number) : null,
+        sec.day_of_week,
+        sec.start_time,
+        sec.end_time,
+        sec.room_number,
+        sec.room_name,
+        sec.semester,
+        sec.academic_year,
+        Boolean(is_published)
+      ]
+    );
+
+    let notificationId = null;
+
+    if (notify_students && Boolean(is_published)) {
+      notificationId = await notifySectionStudents({
+        sectionId: section_id,
+        senderId: req.user.id,
+        title: `New course material: ${sec.code}`,
+        body: `${title} was added for ${sec.code} — ${sec.course_name}.`,
+        type: 'custom',
+        data: {
+          material_id: insertRes.rows[0].id,
+          section_id,
+          course_code: sec.code,
+          course_name: sec.course_name,
+          material_type,
+          week_number: week_number || null
+        }
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      data: {
+        material: insertRes.rows[0],
+        notification_id: notificationId
+      }
+    });
+  } catch (e) {
+    next(e);
+  }
+}
+
+async function updateMaterial(req, res, next) {
+  try {
+    const instructorId = await requireInstructor(req, res);
+    if (!instructorId) return;
+
+    const { materialId } = req.params;
+    const {
+      title,
+      material_type,
+      description,
+      file_url,
+      week_number,
+      is_published
+    } = req.body;
+
+    const ownRes = await query(
+      `SELECT id FROM professor_course_materials WHERE id = $1 AND instructor_id = $2`,
+      [materialId, instructorId]
+    );
+
+    if (!ownRes.rows.length) {
+      return res.status(404).json({ success: false, message: 'Material not found.' });
+    }
+
+    const result = await query(
+      `
+      UPDATE professor_course_materials
+      SET
+        title = COALESCE($1, title),
+        material_type = COALESCE($2, material_type),
+        description = $3,
+        file_url = $4,
+        week_number = $5,
+        is_published = COALESCE($6, is_published),
+        updated_at = NOW()
+      WHERE id = $7
+        AND instructor_id = $8
+      RETURNING *
+      `,
+      [
+        title || null,
+        material_type || null,
+        description || null,
+        file_url || null,
+        week_number ? Number(week_number) : null,
+        is_published === undefined ? null : Boolean(is_published),
+        materialId,
+        instructorId
+      ]
+    );
+
+    res.json({ success: true, data: { material: result.rows[0] } });
+  } catch (e) {
+    next(e);
+  }
+}
+
+async function deleteMaterial(req, res, next) {
+  try {
+    const instructorId = await requireInstructor(req, res);
+    if (!instructorId) return;
+
+    const { materialId } = req.params;
+
+    const result = await query(
+      `
+      DELETE FROM professor_course_materials
+      WHERE id = $1
+        AND instructor_id = $2
+      RETURNING id
+      `,
+      [materialId, instructorId]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ success: false, message: 'Material not found.' });
+    }
+
+    res.json({ success: true, data: { deleted_id: result.rows[0].id } });
+  } catch (e) {
+    next(e);
+  }
+}
+
+async function getOfficeHours(req, res, next) {
+  try {
+    const instructorId = await requireInstructor(req, res);
+    if (!instructorId) return;
+
+    const result = await query(
+      `
+      SELECT
+        id,
+        instructor_id,
+        instructor_email,
+        day_of_week,
+        start_time,
+        end_time,
+        office_room,
+        note,
+        is_active,
+        created_at
+      FROM office_hours
+      WHERE instructor_id = $1
+        AND COALESCE(is_active, TRUE) = TRUE
+      ORDER BY day_of_week, start_time
+      `,
+      [instructorId]
+    );
+
+    res.json({ success: true, data: { office_hours: result.rows } });
+  } catch (e) {
+    next(e);
+  }
+}
+
+async function saveOfficeHour(req, res, next) {
+  try {
+    const instructorId = await requireInstructor(req, res);
+    if (!instructorId) return;
+
+    const {
+      id,
+      day_of_week,
+      start_time,
+      end_time,
+      office_room,
+      note,
+      notify_students = false
+    } = req.body;
+
+    if (day_of_week === undefined || !start_time || !end_time) {
+      return res.status(400).json({ success: false, message: 'Day, start time, and end time are required.' });
+    }
+
+    if (Number(day_of_week) < 0 || Number(day_of_week) > 6) {
+      return res.status(400).json({ success: false, message: 'Invalid day.' });
+    }
+
+    if (String(start_time).slice(0, 5) >= String(end_time).slice(0, 5)) {
+      return res.status(400).json({ success: false, message: 'End time must be after start time.' });
+    }
+
+    let saved;
+
+    if (id) {
+      const result = await query(
+        `
+        UPDATE office_hours
+        SET
+          day_of_week = $1,
+          start_time = $2,
+          end_time = $3,
+          office_room = $4,
+          note = $5,
+          is_active = TRUE
+        WHERE id = $6
+          AND instructor_id = $7
+        RETURNING *
+        `,
+        [Number(day_of_week), start_time, end_time, office_room || null, note || null, id, instructorId]
+      );
+
+      if (!result.rows.length) {
+        return res.status(404).json({ success: false, message: 'Office hour not found.' });
+      }
+
+      saved = result.rows[0];
+    } else {
+      const result = await query(
+        `
+        INSERT INTO office_hours (
+          instructor_id,
+          instructor_email,
+          day_of_week,
+          start_time,
+          end_time,
+          office_room,
+          note,
+          is_active
+        )
+        VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE)
+        RETURNING *
+        `,
+        [instructorId, req.user.email, Number(day_of_week), start_time, end_time, office_room || null, note || null]
+      );
+
+      saved = result.rows[0];
+    }
+
+    let notificationId = null;
+
+    if (notify_students) {
+      notificationId = await notifyAllProfessorStudents({
+        instructorId,
+        senderId: req.user.id,
+        title: 'Office hours updated',
+        body: `Office hours were updated: day ${day_of_week}, ${start_time} - ${end_time}${office_room ? `, location: ${office_room}` : ''}.`,
+        type: 'custom',
+        data: {
+          office_hour_id: saved.id,
+          day_of_week: Number(day_of_week),
+          start_time,
+          end_time,
+          office_room: office_room || null
+        }
+      });
+    }
+
+    res.json({ success: true, data: { office_hour: saved, notification_id: notificationId } });
+  } catch (e) {
+    next(e);
+  }
+}
+
+async function deleteOfficeHour(req, res, next) {
+  try {
+    const instructorId = await requireInstructor(req, res);
+    if (!instructorId) return;
+
+    const { officeHourId } = req.params;
+
+    const result = await query(
+      `
+      UPDATE office_hours
+      SET is_active = FALSE
+      WHERE id = $1
+        AND instructor_id = $2
+      RETURNING id
+      `,
+      [officeHourId, instructorId]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ success: false, message: 'Office hour not found.' });
+    }
+
+    res.json({ success: true, data: { deleted_id: result.rows[0].id } });
+  } catch (e) {
+    next(e);
+  }
+}
+
+async function getOfficeHourBookings(req, res, next) {
+  try {
+    const instructorId = await requireInstructor(req, res);
+    if (!instructorId) return;
+
+    const result = await query(
+      `
+      SELECT
+        b.id,
+        b.office_hour_id,
+        b.student_id,
+        b.requested_date,
+        b.message,
+        b.status,
+        b.created_at,
+        oh.day_of_week,
+        oh.start_time,
+        oh.end_time,
+        oh.office_room,
+        CONCAT_WS(' ', u.first_name, u.last_name) AS student_name,
+        u.student_id AS student_number,
+        u.email AS student_email
+      FROM office_hour_bookings b
+      JOIN office_hours oh ON oh.id = b.office_hour_id
+      JOIN users u ON u.id = b.student_id
+      WHERE oh.instructor_id = $1
+      ORDER BY
+        CASE b.status WHEN 'pending' THEN 0 WHEN 'accepted' THEN 1 ELSE 2 END,
+        b.created_at DESC
+      `,
+      [instructorId]
+    );
+
+    res.json({ success: true, data: { bookings: result.rows } });
+  } catch (e) {
+    next(e);
+  }
+}
+
+async function respondOfficeHourBooking(req, res, next) {
+  try {
+    const instructorId = await requireInstructor(req, res);
+    if (!instructorId) return;
+
+    const { bookingId } = req.params;
+    const { status } = req.body;
+
+    if (!['accepted', 'declined'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'Invalid booking status.' });
+    }
+
+    const result = await query(
+      `
+      UPDATE office_hour_bookings b
+      SET status = $1,
+          responded_at = NOW(),
+          responded_by = $2
+      FROM office_hours oh
+      WHERE b.office_hour_id = oh.id
+        AND oh.instructor_id = $3
+        AND b.id = $4
+      RETURNING b.*, oh.day_of_week, oh.start_time, oh.end_time, oh.office_room
+      `,
+      [status, req.user.id, instructorId, bookingId]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ success: false, message: 'Booking request not found.' });
+    }
+
+    const booking = result.rows[0];
+
+    const notificationRes = await query(
+      `
+      INSERT INTO notifications (title, body, type, sender_id, target_role, data, is_published, published_at)
+      VALUES ($1, $2, 'custom'::notification_type, $3, 'student', $4::jsonb, TRUE, NOW())
+      RETURNING id
+      `,
+      [
+        status === 'accepted' ? 'Office hour request accepted' : 'Office hour request declined',
+        status === 'accepted'
+          ? `Your office hour request was accepted. Time: ${booking.start_time} - ${booking.end_time}${booking.office_room ? `, location: ${booking.office_room}` : ''}.`
+          : 'Your office hour request was declined. Please choose another office hour.',
+        req.user.id,
+        JSON.stringify({ booking_id: booking.id, office_hour_id: booking.office_hour_id, status })
+      ]
+    );
+
+    await query(
+      `
+      INSERT INTO notification_receipts (notification_id, user_id)
+      VALUES ($1, $2)
+      ON CONFLICT (notification_id, user_id) DO NOTHING
+      `,
+      [notificationRes.rows[0].id, booking.student_id]
+    );
+
+    res.json({ success: true, data: { booking, notification_id: notificationRes.rows[0].id } });
+  } catch (e) {
+    next(e);
+  }
+}
+
+async function getCourseMessages(req, res, next) {
+  try {
+    const instructorId = await requireInstructor(req, res);
+    if (!instructorId) return;
+
+    const sectionsRes = await query(
+      `
+      SELECT
+        s.id,
+        s.section_number,
+        c.code,
+        c.name AS course_name,
+        COALESCE(c.name_ar, c.name) AS course_name_ar,
+        (
+          SELECT COUNT(*)
+          FROM enrollments e
+          WHERE e.section_id = s.id
+            AND e.status = 'enrolled'
+        ) AS enrolled
+      FROM sections s
+      JOIN courses c ON c.id = s.course_id
+      WHERE s.instructor_id = $1
+        AND s.is_active = TRUE
+      ORDER BY c.code, s.section_number
+      `,
+      [instructorId]
+    );
+
+    const messagesRes = await query(
+      `
+      SELECT
+        m.id,
+        m.section_id,
+        m.title,
+        m.body,
+        m.is_pinned,
+        m.created_at,
+        m.updated_at,
+        c.code AS course_code,
+        c.name AS course_name,
+        s.section_number
+      FROM section_messages m
+      JOIN sections s ON s.id = m.section_id
+      JOIN courses c ON c.id = s.course_id
+      WHERE m.instructor_id = $1
+        AND m.is_active = TRUE
+      ORDER BY m.is_pinned DESC, m.created_at DESC
+      `,
+      [instructorId]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        sections: sectionsRes.rows,
+        messages: messagesRes.rows
+      }
+    });
+  } catch (e) {
+    next(e);
+  }
+}
+
+async function createCourseMessage(req, res, next) {
+  try {
+    const instructorId = await requireInstructor(req, res);
+    if (!instructorId) return;
+
+    const { section_id, title, body, is_pinned = false, notify_students = true } = req.body;
+
+    if (!section_id || !title || !body) {
+      return res.status(400).json({ success: false, message: 'Section, title, and message are required.' });
+    }
+
+    const ownRes = await query(
+      `
+      SELECT s.id, c.code, c.name AS course_name, s.section_number
+      FROM sections s
+      JOIN courses c ON c.id = s.course_id
+      WHERE s.id = $1
+        AND s.instructor_id = $2
+        AND s.is_active = TRUE
+      `,
+      [section_id, instructorId]
+    );
+
+    if (!ownRes.rows.length) {
+      return res.status(403).json({ success: false, message: 'Not your active section.' });
+    }
+
+    const section = ownRes.rows[0];
+
+    const insertRes = await query(
+      `
+      INSERT INTO section_messages (section_id, instructor_id, title, body, is_pinned, is_active, created_at, updated_at)
+      VALUES ($1,$2,$3,$4,$5,TRUE,NOW(),NOW())
+      RETURNING *
+      `,
+      [section_id, instructorId, title.trim(), body.trim(), Boolean(is_pinned)]
+    );
+
+    let notificationId = null;
+    if (notify_students) {
+      notificationId = await notifySectionStudents({
+        sectionId: section_id,
+        senderId: req.user.id,
+        title: `New message: ${title.trim()}`,
+        body: `${section.code} §${section.section_number}: ${body.trim()}`,
+        type: 'custom',
+        data: {
+          section_id,
+          message_id: insertRes.rows[0].id,
+          course_code: section.code
+        }
+      });
+    }
+
+    res.status(201).json({ success: true, data: { message: insertRes.rows[0], notification_id: notificationId } });
+  } catch (e) {
+    next(e);
+  }
+}
+
+async function deleteCourseMessage(req, res, next) {
+  try {
+    const instructorId = await requireInstructor(req, res);
+    if (!instructorId) return;
+
+    const { messageId } = req.params;
+
+    const result = await query(
+      `
+      UPDATE section_messages
+      SET is_active = FALSE,
+          updated_at = NOW()
+      WHERE id = $1
+        AND instructor_id = $2
+      RETURNING id
+      `,
+      [messageId, instructorId]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ success: false, message: 'Message not found.' });
+    }
+
+    res.json({ success: true, data: { deleted_id: result.rows[0].id } });
+  } catch (e) {
+    next(e);
+  }
+}
+
+async function exportGradesCsv(req, res, next) {
+  try {
+    const instructorId = await requireInstructor(req, res);
+    if (!instructorId) return;
+
+    const { sectionId } = req.params;
+
+    const ownRes = await query(
+      `
+      SELECT s.id, s.section_number, c.code
+      FROM sections s
+      JOIN courses c ON c.id = s.course_id
+      WHERE s.id = $1
+        AND s.instructor_id = $2
+      `,
+      [sectionId, instructorId]
+    );
+
+    if (!ownRes.rows.length) {
+      return res.status(403).json({ success: false, message: 'Not your section.' });
+    }
+
+    const result = await query(
+      `
+      SELECT
+        u.student_id,
+        CONCAT_WS(' ', u.first_name, u.last_name) AS student_name,
+        u.email,
+        COALESCE(g.midterm, 0) AS midterm,
+        COALESCE(g.assignments, 0) AS assignments,
+        COALESCE(g.final, 0) AS final,
+        COALESCE(g.practical, 0) AS practical,
+        COALESCE(g.letter_grade, '') AS letter_grade,
+        (COALESCE(g.midterm,0) + COALESCE(g.assignments,0) + COALESCE(g.final,0) + COALESCE(g.practical,0)) AS total
+      FROM enrollments e
+      JOIN users u ON u.id = e.student_id
+      LEFT JOIN grades g ON g.student_id = u.id AND g.section_id = e.section_id
+      WHERE e.section_id = $1
+        AND e.status = 'enrolled'
+      ORDER BY u.last_name, u.first_name
+      `,
+      [sectionId]
+    );
+
+    const rows = [
+      ['Student ID', 'Student Name', 'Email', 'Midterm', 'Assignments', 'Final', 'Practical', 'Total', 'Letter Grade'],
+      ...result.rows.map((r) => [r.student_id, r.student_name, r.email, r.midterm, r.assignments, r.final, r.practical, r.total, r.letter_grade])
+    ];
+
+    sendCsv(res, `${ownRes.rows[0].code}-section-${ownRes.rows[0].section_number}-grades.csv`, rows);
+  } catch (e) {
+    next(e);
+  }
+}
+
+async function exportAttendanceCsv(req, res, next) {
+  try {
+    const instructorId = await requireInstructor(req, res);
+    if (!instructorId) return;
+
+    const { sectionId } = req.params;
+
+    const ownRes = await query(
+      `
+      SELECT s.id, s.section_number, c.code
+      FROM sections s
+      JOIN courses c ON c.id = s.course_id
+      WHERE s.id = $1
+        AND s.instructor_id = $2
+      `,
+      [sectionId, instructorId]
+    );
+
+    if (!ownRes.rows.length) {
+      return res.status(403).json({ success: false, message: 'Not your section.' });
+    }
+
+    const result = await query(
+      `
+      SELECT
+        u.student_id,
+        CONCAT_WS(' ', u.first_name, u.last_name) AS student_name,
+        u.email,
+        COUNT(a.id) FILTER (WHERE a.status = 'present') AS present,
+        COUNT(a.id) FILTER (WHERE a.status = 'absent') AS absent,
+        COUNT(a.id) FILTER (WHERE a.status = 'late') AS late,
+        COUNT(a.id) FILTER (WHERE a.status = 'excused') AS excused,
+        COUNT(a.id) AS total_records,
+        ROUND(
+          COUNT(a.id) FILTER (WHERE a.status IN ('present','late'))::numeric
+          / NULLIF(COUNT(a.id), 0) * 100,
+          1
+        ) AS attendance_pct
+      FROM enrollments e
+      JOIN users u ON u.id = e.student_id
+      LEFT JOIN attendance a ON a.student_id = u.id AND a.section_id = e.section_id
+      WHERE e.section_id = $1
+        AND e.status = 'enrolled'
+      GROUP BY u.id, u.student_id, u.first_name, u.last_name, u.email
+      ORDER BY u.last_name, u.first_name
+      `,
+      [sectionId]
+    );
+
+    const rows = [
+      ['Student ID', 'Student Name', 'Email', 'Present', 'Absent', 'Late', 'Excused', 'Total Records', 'Attendance %'],
+      ...result.rows.map((r) => [r.student_id, r.student_name, r.email, r.present, r.absent, r.late, r.excused, r.total_records, r.attendance_pct || ''])
+    ];
+
+    sendCsv(res, `${ownRes.rows[0].code}-section-${ownRes.rows[0].section_number}-attendance.csv`, rows);
+  } catch (e) {
+    next(e);
+  }
+}
+
+async function getChangeHistory(req, res, next) {
+  try {
+    const instructorId = await requireInstructor(req, res);
+    if (!instructorId) return;
+
+    const result = await query(
+      `
+      SELECT
+        cmc.id,
+        cmc.section_id,
+        cmc.section_meeting_id AS meeting_id,
+        cmc.change_scope,
+        cmc.change_date,
+        cmc.start_date,
+        cmc.end_date,
+        cmc.old_day_of_week,
+        cmc.old_start_time,
+        cmc.old_end_time,
+        old_room.room_number AS old_room_number,
+        old_room.name AS old_room_name,
+        cmc.new_day_of_week,
+        cmc.new_start_time,
+        cmc.new_end_time,
+        new_room.room_number AS new_room_number,
+        new_room.name AS new_room_name,
+        cmc.reason,
+        cmc.created_at,
+        cmc.is_active,
+        s.section_number,
+        c.code,
+        c.name AS course_name,
+        COALESCE(c.name_ar, c.name) AS course_name_ar
+      FROM section_meeting_changes cmc
+      JOIN sections s ON s.id = cmc.section_id
+      JOIN courses c ON c.id = s.course_id
+      LEFT JOIN rooms old_room ON old_room.id = cmc.old_room_id
+      LEFT JOIN rooms new_room ON new_room.id = cmc.new_room_id
+      WHERE s.instructor_id = $1
+      ORDER BY cmc.created_at DESC
+      `,
+      [instructorId]
+    );
+
+    res.json({ success: true, data: { changes: result.rows } });
+  } catch (e) {
+    next(e);
+  }
+}
+
+async function cancelMeetingChange(req, res, next) {
+  try {
+    const instructorId = await requireInstructor(req, res);
+    if (!instructorId) return;
+
+    const { changeId } = req.params;
+
+    const ownRes = await query(
+      `
+      SELECT
+        cmc.*,
+        s.id AS section_id,
+        s.section_number,
+        c.code,
+        c.name AS course_name
+      FROM section_meeting_changes cmc
+      JOIN sections s ON s.id = cmc.section_id
+      JOIN courses c ON c.id = s.course_id
+      WHERE cmc.id = $1
+        AND s.instructor_id = $2
+      `,
+      [changeId, instructorId]
+    );
+
+    if (!ownRes.rows.length) {
+      return res.status(404).json({ success: false, message: 'Change not found.' });
+    }
+
+    const change = ownRes.rows[0];
+
+    if (change.change_scope === 'permanent') {
+      return res.status(400).json({
+        success: false,
+        message: 'Permanent changes already updated the schedule. Create another change to modify it again.'
+      });
+    }
+
+    await query(
+      `UPDATE section_meeting_changes SET is_active = FALSE WHERE id = $1`,
+      [changeId]
+    );
+
+    const notificationId = await notifySectionStudents({
+      sectionId: change.section_id,
+      senderId: req.user.id,
+      title: `Schedule change canceled: ${change.code}`,
+      body: `The temporary schedule change for ${change.code} — ${change.course_name} section ${change.section_number} was canceled. Please follow the original schedule.`,
+      type: 'custom',
+      data: {
+        change_id: changeId,
+        section_id: change.section_id,
+        course_code: change.code,
+        canceled: true
+      }
+    });
+
+    res.json({ success: true, data: { canceled_id: changeId, notification_id: notificationId } });
+  } catch (e) {
+    next(e);
+  }
+}
+
+async function getAnalytics(req, res, next) {
+  try {
+    const instructorId = await requireInstructor(req, res);
+    if (!instructorId) return;
+
+    const sectionsRes = await query(
+      `
+      WITH attendance_by_student AS (
+        SELECT
+          a.section_id,
+          a.student_id,
+          ROUND(
+            COUNT(a.id) FILTER (WHERE a.status IN ('present','late'))::numeric
+            / NULLIF(COUNT(a.id), 0) * 100,
+            1
+          ) AS attendance_pct
+        FROM attendance a
+        GROUP BY a.section_id, a.student_id
+      ),
+      grade_by_student AS (
+        SELECT
+          g.section_id,
+          g.student_id,
+          COALESCE(g.midterm, 0) + COALESCE(g.assignments, 0) + COALESCE(g.final, 0) + COALESCE(g.practical, 0) AS total_grade
+        FROM grades g
+      )
+      SELECT
+        s.id AS section_id,
+        s.section_number,
+        c.code,
+        c.name AS course_name,
+        COALESCE(c.name_ar, c.name) AS course_name_ar,
+        COUNT(DISTINCT e.student_id) FILTER (WHERE e.status = 'enrolled') AS enrolled,
+        ROUND(AVG(abs.attendance_pct), 1) AS average_attendance,
+        COUNT(DISTINCT abs.student_id) FILTER (WHERE abs.attendance_pct < 75) AS below_75_count,
+        ROUND(AVG(gbs.total_grade), 1) AS average_grade,
+        MAX(gbs.total_grade) AS highest_grade,
+        MIN(gbs.total_grade) AS lowest_grade,
+        COUNT(DISTINCT e.student_id) FILTER (
+          WHERE e.status = 'enrolled'
+            AND gbs.student_id IS NULL
+        ) AS missing_grades,
+        COUNT(DISTINCT gbs.student_id) FILTER (WHERE gbs.total_grade < 60) AS failing_count
+      FROM sections s
+      JOIN courses c ON c.id = s.course_id
+      LEFT JOIN enrollments e ON e.section_id = s.id
+      LEFT JOIN attendance_by_student abs ON abs.section_id = s.id AND abs.student_id = e.student_id
+      LEFT JOIN grade_by_student gbs ON gbs.section_id = s.id AND gbs.student_id = e.student_id
+      WHERE s.instructor_id = $1
+        AND s.is_active = TRUE
+      GROUP BY s.id, s.section_number, c.code, c.name, c.name_ar
+      ORDER BY c.code, s.section_number
+      `,
+      [instructorId]
+    );
+
+    const totalsRes = await query(
+      `
+      SELECT
+        COUNT(DISTINCT s.id) AS total_sections,
+        COUNT(DISTINCT e.student_id) FILTER (WHERE e.status = 'enrolled') AS total_students,
+        COUNT(DISTINCT c.id) AS total_courses,
+        COUNT(DISTINCT aw.id) AS warnings_sent
+      FROM sections s
+      JOIN courses c ON c.id = s.course_id
+      LEFT JOIN enrollments e ON e.section_id = s.id
+      LEFT JOIN attendance_warnings aw ON aw.section_id = s.id
+      WHERE s.instructor_id = $1
+        AND s.is_active = TRUE
+      `,
+      [instructorId]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        totals: totalsRes.rows[0] || {},
+        sections: sectionsRes.rows
+      }
+    });
+  } catch (e) {
+    next(e);
+  }
+}
+
 module.exports = {
   getDashboard,
   getSectionStudents,
@@ -1207,5 +2409,24 @@ module.exports = {
   sendAttendanceWarning,
   getSchedule,
   getRoomsForChange,
-  changeMeeting
+  changeMeeting,
+  getMaterials,
+  uploadMaterialFile,
+  recordMaterialOpen,
+  createMaterial,
+  updateMaterial,
+  deleteMaterial,
+  getOfficeHours,
+  saveOfficeHour,
+  deleteOfficeHour,
+  getOfficeHourBookings,
+  respondOfficeHourBooking,
+  getCourseMessages,
+  createCourseMessage,
+  deleteCourseMessage,
+  exportGradesCsv,
+  exportAttendanceCsv,
+  getChangeHistory,
+  cancelMeetingChange,
+  getAnalytics
 };
